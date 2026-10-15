@@ -104,7 +104,6 @@ cargo test
 | `x86_64-unknown-linux-musl` / `gnu` | Linux | AMD64 (Standard Linux / CI) | Tier 1 Supported |
 | `aarch64-unknown-linux-musl` / `gnu` | Linux | ARM64 (AWS Graviton / Raspberry Pi) | Tier 1 Supported |
 | `aarch64-apple-darwin` | macOS | Apple Silicon (M1/M2/M3/M4) | Tier 1 Supported |
-| `x86_64-apple-darwin` | macOS | Intel Mac | Tier 1 Supported |
 
 ### Cross-Compiling with `cross` or `cargo-zigbuild`
 

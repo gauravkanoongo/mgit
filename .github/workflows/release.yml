@@ -58,12 +58,6 @@ jobs:
             artifact_name: mgit-macos-arm64
             use_cross: false
 
-          # macOS AMD64 (Intel)
-          - os: macos-13
-            target: x86_64-apple-darwin
-            artifact_name: mgit-macos-amd64
-            use_cross: false
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
