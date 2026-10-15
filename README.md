@@ -4,104 +4,126 @@
 [![License](https://img.shields.io/crates/l/mgit.svg)](https://github.com/koozz/mgit/blob/master/LICENSE)
 [![Downloads](https://img.shields.io/crates/d/mgit.svg)](https://crates.io/crates/mgit)
 
-Multi-git is a quick tool that could easily have been created with some shell
-scripts, but it's a nice project to tackle a part of my daily workflow.
-It performs git actions on multiple directories within the current tree.
+Fast, asynchronous multi-repository Git CLI utility with guaranteed deterministic in-order output, intelligent directory pruning, and first-class AI-agent workflow support.
 
-It will:
-* walk the directory tree;
-* traverse and find all git projects;
-* perform `git` with all the arguments you passed to  `mgit`.
-* collect output per directory;
-* outputting thread-safe in the main thread;
+---
 
-It can even be tweaked with the environment variable `MGIT_PARALLEL`
-(defaulting to number of cpus times 8).
+## Features
 
-## Examples
+- **Fully Asynchronous (`tokio`)**: Runs parallel Git operations across dozens/hundreds of repositories without spawning unbounded OS thread stacks.
+- **Strict In-Order Sequential Output**: Concurrently executes tasks, but buffers and streams stdout/stderr in deterministic alphabetical repository order.
+- **Unambiguous Argument Model**: All arguments before the **last `--`** go to `git`; options after the **last `--`** configure `mgit`.
+- **Fast Directory Pruning**: Avoids traversing into `.git/`, `node_modules/`, `target/`, `.cargo/`, `vendor/`, `build/`, and virtual environments.
+- **Worktree & Submodule Support**: Automatically identifies both `.git` directories and `.git` pointer files (`gitdir: ...`).
+- **AI-Agent & Scripting Ready (`--json`)**: Emits structured JSON schemas with per-repository exit codes, diffs, changes detection, and execution timings.
 
-Keeping your indices up-to-date:
+---
 
-```sh
-$ mgit fetch
-```
-
-Keeping your code up to date (if no conflicts):
+## Usage
 
 ```sh
-$ mgit pull --ff-only
+# Run git commands across all repositories in current workspace:
+mgit status
+mgit pull --ff-only
+mgit pull --rebase --autostash
+mgit log -n 3 --oneline
+
+# Commands with internal git '--' work out-of-the-box:
+mgit checkout main -- file.txt
 ```
 
-Keeping your code up to date, rebasing and using autostash:
+### Passing Options to `mgit` (After Last `--`)
+
+Any arguments after the **last `--`** configure `mgit`:
 
 ```sh
-$ mgit pull --rebase --autostash
+# Only display repositories with changes, warnings, or errors
+mgit status -s -- -q
+
+# Only display repositories with non-empty git stdout
+mgit status -s -- --only-changes
+
+# Run on a custom directory with 16 parallel workers
+mgit fetch --all -- -C /path/to/workspace -j 16
+
+# Machine-readable JSON output (ideal for AI coding agents & scripts)
+mgit status -s -- --json
+
+# Abort remaining tasks on first failure
+mgit pull -- --fail-fast
 ```
 
-## Output
+### Available `mgit` Options
 
-Per (found) git repository, the output will show:
+| Flag | Option | Description |
+| :--- | :--- | :--- |
+| `-C` | `--dir <PATH>` | Root directory to search for git repositories (default: `.`) |
+| `-j` | `--jobs <N>` | Maximum concurrent async workers (default: `MGIT_PARALLEL` or `cpus * 8`) |
+| `-q` | `--quiet` | Suppress output for clean repositories |
+| | `--only-changes` | Only display repositories that produced non-empty git stdout |
+| | `--json` | Output structured JSON report for automation and AI agents |
+| | `--summary-only` | Print only the final tally summary |
+| | `--fail-fast` | Cancel remaining async operations on first error |
+| `-d` | `--max-depth <N>` | Limit directory traversal depth |
+| `-h` | `--help` | Display usage and help |
 
-* The path of the repository on disk.
-* The output for the git action on that repository.
+---
 
-As a summary it will show some statistics:
+## Building Locally
+
+### Release Build
+
+To compile an optimized production release build locally:
 
 ```sh
-Success: 110, Warnings: 3
+# Standard release build (output in target/release/mgit)
+cargo build --release
+
+# Install locally into your cargo binary PATH (~/.cargo/bin or %USERPROFILE%\.cargo\bin):
+cargo install --path .
 ```
 
-## Roadmap / ideas
+### Running Tests
 
-* Use async.
-* Benchmark (and optimize?).
+```sh
+cargo test
+```
 
-## Changelog
+---
 
-### 0.1.10
+## Multi-Target OS & Architecture Support
 
-* Updated dependencies.
+`mgit` is written in pure, portable Rust (using Tokio, WalkDir, Serde, and standard OS process spawning). It has **no C/C++ library dependencies (no OpenSSL, no libgit2, no C toolchain requirements)**, making cross-compilation straightforward across major operating systems and architectures.
 
-### 0.1.9
+### Primary Targets
 
-* Increased default thread count.
-* Updated dependencies.
+| Target Triple | OS | Architecture | Status |
+| :--- | :--- | :--- | :--- |
+| `x86_64-pc-windows-msvc` / `gnu` | Windows | AMD64 (64-bit Intel/AMD) | Tier 1 Supported |
+| `aarch64-pc-windows-msvc` | Windows | ARM64 (Surface / Snapdragon) | Tier 1 Supported |
+| `x86_64-unknown-linux-musl` / `gnu` | Linux | AMD64 (Standard Linux / CI) | Tier 1 Supported |
+| `aarch64-unknown-linux-musl` / `gnu` | Linux | ARM64 (AWS Graviton / Raspberry Pi) | Tier 1 Supported |
+| `aarch64-apple-darwin` | macOS | Apple Silicon (M1/M2/M3/M4) | Tier 1 Supported |
+| `x86_64-apple-darwin` | macOS | Intel Mac | Tier 1 Supported |
 
-### 0.1.8
+### Cross-Compiling with `cross` or `cargo-zigbuild`
 
-* Updated dependencies.
+Because `mgit` contains only pure Rust dependencies:
+```sh
+# Install cross
+cargo install cross --git https://github.com/cross-rs/cross
 
-### 0.1.7
+# Build for Linux ARM64 (musl - fully static zero-dependency binary):
+cross build --target aarch64-unknown-linux-musl --release
 
-* Updated libc.
+# Build for Linux AMD64 (musl - fully static):
+cross build --target x86_64-unknown-linux-musl --release
 
-### 0.1.6
+# Build for Windows ARM64:
+cargo build --target aarch64-pc-windows-msvc --release
+```
 
-* Updated walkdir dependency.
-
-### 0.1.5
-
-* Add empty line at the end of the output.
-
-### 0.1.4
-
-* Updated dependencies.
-
-### 0.1.3
-
-* Output the amount of projects affected (and the command) up front.
-
-### 0.1.2
-
-* Moved output collection into spawned thread to release file handles earlier.
-
-### 0.1.1
-
-* Add a summary at the end of the output.
-
-### 0.1.0
-
-* Initial working version.
+---
 
 ## License
 
