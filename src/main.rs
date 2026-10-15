@@ -1,6 +1,4 @@
-extern crate num_cpus;
-extern crate threadpool;
-extern crate walkdir;
+pub mod args;
 
 use std::env;
 use std::fmt::Write as FmtWrite;

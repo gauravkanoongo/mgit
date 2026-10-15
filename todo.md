@@ -7,7 +7,7 @@
 
 ## Overall Progress
 
-- [ ] **Phase 1: Toolchain Modernization & Argument Parser Engine**
+- [x] **Phase 1: Toolchain Modernization & Argument Parser Engine**
 - [ ] **Phase 2: Repository Discovery Engine & Pruning**
 - [ ] **Phase 3: In-Order Output Streaming & Formatters**
 - [ ] **Phase 4: Async Process Execution Engine (`tokio`)**
@@ -18,21 +18,21 @@
 ## Detailed Task Breakdown
 
 ### Phase 1: Toolchain Modernization & Argument Parser Engine
-- [ ] Upgrade `Cargo.toml` to `edition = "2024"` and add required dependencies
-- [ ] Implement `src/args.rs`:
-  - [ ] `MgitConfig` struct with full defaults (`dir`, `jobs`, `quiet`, `only_changes`, `json`, `summary_only`, `fail_fast`, `max_depth`)
-  - [ ] `parse_cli` function splitting at the **last `--`** delimiter
-  - [ ] `lexopt` parser for tokens following the last `--`
-- [ ] Unit Tests for `src/args.rs`:
-  - [ ] `test_no_arguments_returns_error`
-  - [ ] `test_pure_git_command_no_separator`
-  - [ ] `test_git_command_with_internal_separator`
-  - [ ] `test_separator_with_all_mgit_flags`
-  - [ ] `test_multiple_separators_last_takes_precedence`
-  - [ ] `test_invalid_mgit_flag_returns_error`
-  - [ ] `test_invalid_jobs_parameter_returns_error`
-  - [ ] `test_help_flag_triggers_help_signal`
-  - [ ] `test_mgit_parallel_env_fallback`
+- [x] Upgrade `Cargo.toml` to `edition = "2024"` and add required dependencies
+- [x] Implement `src/args.rs`:
+  - [x] `MgitConfig` struct with full defaults (`dir`, `jobs`, `quiet`, `only_changes`, `json`, `summary_only`, `fail_fast`, `max_depth`)
+  - [x] `parse_cli` function splitting at the **last `--`** delimiter
+  - [x] `lexopt` parser for tokens following the last `--`
+- [x] Unit Tests for `src/args.rs`:
+  - [x] `test_no_arguments_returns_error`
+  - [x] `test_pure_git_command_no_separator`
+  - [x] `test_git_command_with_internal_separator`
+  - [x] `test_separator_with_all_mgit_flags`
+  - [x] `test_multiple_separators_last_takes_precedence`
+  - [x] `test_invalid_mgit_flag_returns_error`
+  - [x] `test_invalid_jobs_parameter_returns_error`
+  - [x] `test_help_flag_triggers_help_signal`
+  - [x] `test_mgit_parallel_env_fallback`
 
 ---
 
