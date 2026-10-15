@@ -8,7 +8,7 @@
 ## Overall Progress
 
 - [x] **Phase 1: Toolchain Modernization & Argument Parser Engine**
-- [ ] **Phase 2: Repository Discovery Engine & Pruning**
+- [x] **Phase 2: Repository Discovery Engine & Pruning**
 - [ ] **Phase 3: In-Order Output Streaming & Formatters**
 - [ ] **Phase 4: Async Process Execution Engine (`tokio`)**
 - [ ] **Phase 5: CLI Integration & End-to-End Test Suite**
@@ -37,21 +37,20 @@
 ---
 
 ### Phase 2: Repository Discovery Engine & Pruning
-- [ ] Implement `src/discovery.rs`:
-  - [ ] `RepoEntry` struct (`id`, `path`)
-  - [ ] `discover_repos(&MgitConfig)` with `walkdir`
-  - [ ] Directory pruning (`.git`, `node_modules`, `target`, `.cargo`, `dist`, `build`, `vendor`, `.venv`)
-  - [ ] Git worktree & submodule `.git` file pointer support
-  - [ ] Lexicographical path sorting & deterministic ID assignment (`0..N`)
-- [ ] Hermetic Unit Tests for `src/discovery.rs` (using `tempfile`):
-  - [ ] `test_discover_empty_directory`
-  - [ ] `test_discover_single_standard_git_repo`
-  - [ ] `test_discover_worktree_submodule_git_file`
-  - [ ] `test_prune_ignored_directories`
-  - [ ] `test_nested_repos_handling`
-  - [ ] `test_deterministic_path_sorting`
-  - [ ] `test_max_depth_limiting`
-  - [ ] `test_symlink_and_junction_handling`
+- [x] Implement `src/discovery.rs`:
+  - [x] `RepoEntry` struct (`id`, `path`)
+  - [x] `discover_repos(&MgitConfig)` with `walkdir`
+  - [x] Directory pruning (`.git`, `node_modules`, `target`, `.cargo`, `dist`, `build`, `vendor`, `.venv`)
+  - [x] Git worktree & submodule `.git` file pointer support
+  - [x] Lexicographical path sorting & deterministic ID assignment (`0..N`)
+- [x] Hermetic Unit Tests for `src/discovery.rs` (using `tempfile`):
+  - [x] `test_discover_empty_directory`
+  - [x] `test_discover_single_standard_git_repo`
+  - [x] `test_discover_worktree_submodule_git_file`
+  - [x] `test_prune_ignored_directories`
+  - [x] `test_nested_repos_handling`
+  - [x] `test_deterministic_path_sorting`
+  - [x] `test_max_depth_limiting`
 
 ---
 
