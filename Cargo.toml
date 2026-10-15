@@ -1,18 +1,27 @@
 [package]
 name = "mgit"
-version = "0.1.10"
+version = "0.2.0"
 authors = ["Jan van den Berg <rust@koozz.nl>"]
 license = "MIT"
-description = "Run git on multiple projects."
-keywords = ["cli", "git", "parallel"]
+description = "Fast, async parallel git execution across multiple repositories with deterministic ordering."
+keywords = ["cli", "git", "parallel", "async"]
 categories = ["command-line-interface", "command-line-utilities"]
 homepage = "https://github.com/koozz/mgit"
 repository = "https://github.com/koozz/mgit"
 readme = "README.md"
-edition = "2018"
+edition = "2024"
 
 [dependencies]
-num_cpus = "1.13.0"
-termcolor = "1.1.0"
-threadpool = "1.8.1"
-walkdir = "2.3.1"
+tokio = { version = "1.43", features = ["macros", "rt-multi-thread", "process", "sync", "time", "io-util", "signal"] }
+tokio-util = "0.7"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+lexopt = "0.3"
+walkdir = "2.5"
+num_cpus = "1.16"
+anstream = "0.6"
+anstyle = "1.0"
+
+
+[dev-dependencies]
+tempfile = "3.17"

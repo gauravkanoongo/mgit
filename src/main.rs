@@ -1,168 +1,92 @@
-extern crate num_cpus;
-extern crate threadpool;
-extern crate walkdir;
+pub mod args;
+pub mod discovery;
+pub mod engine;
+pub mod output;
 
-use std::env;
-use std::fmt::Write as FmtWrite;
-use std::io::{stderr, Error, Write};
-use std::path::PathBuf;
-use std::process::{Command, Stdio};
-use std::sync::mpsc::{channel, Receiver, Sender};
-use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
-use threadpool::ThreadPool;
-use walkdir::WalkDir;
+use std::sync::Arc;
+use tokio::sync::mpsc;
+use tokio_util::sync::CancellationToken;
 
-enum GitStatus {
-    SUCCESS,
-    FAILURE,
-    ERROR,
+use crate::args::{parse_cli, ArgsError};
+use crate::discovery::discover_repos;
+use crate::engine::run_engine;
+use crate::output::{stream_in_order, JsonFormatter, OutputFormatter, TerminalFormatter};
+
+#[tokio::main]
+async fn main() {
+    let exit_code = run().await;
+    std::process::exit(exit_code);
 }
 
-fn main() {
-    if env::args().len() <= 1 {
-        eprintln!("mgit: Please provide some arguments to pass on to git.");
-        return;
-    }
-
-    // Allow customizing pool size
-    let pool_size: usize = match env::var("MGIT_PARALLEL") {
-        Ok(val) => val.parse().unwrap_or(4),
-        Err(_) => num_cpus::get() * 8,
+async fn run() -> i32 {
+    let (git_args, config) = match parse_cli(std::env::args()) {
+        Ok(res) => res,
+        Err(ArgsError::HelpRequested) => {
+            println!("{}", args::help_text());
+            return 0;
+        }
+        Err(err) => {
+            eprintln!("{err}");
+            return 2;
+        }
     };
 
-    let (tx, rx) = channel();
-    fork(pool_size, &tx).unwrap();
-    drop(tx);
-    join(rx).unwrap()
-}
+    let repos = match discover_repos(&config) {
+        Ok(r) => r,
+        Err(err) => {
+            eprintln!("mgit: Error discovering repositories: {err}");
+            return 1;
+        }
+    };
 
-fn fork(pool_size: usize, tx: &Sender<(PathBuf, GitStatus, String)>) -> Result<(), Error> {
-    let mut count = 0;
-    let pool = ThreadPool::new(pool_size);
-    for entry in WalkDir::new(env::current_dir()?)
-        .follow_links(true)
-        .into_iter()
-        .filter_map(|e| e.ok())
-        .filter(|e| e.file_type().is_dir() && e.file_name().eq(".git"))
-    {
-        count += 1;
-        let path = entry.path().parent().unwrap().to_owned();
-        let tx = tx.clone();
-        pool.execute(move || {
-            let args: Vec<_> = env::args().skip(1).collect();
-            let result = Command::new("git")
-                .current_dir(path.clone())
-                .args(args)
-                .stdin(Stdio::null())
-                .stdout(Stdio::piped())
-                .stderr(Stdio::piped())
-                .spawn();
+    let total = repos.len();
 
-            let mut output = String::new();
-            let status: GitStatus;
-            match result {
-                Ok(child) => {
-                    let child_output = child.wait_with_output().unwrap();
+    // Select output formatter
+    let stdout = anstream::stdout();
+    let formatter: Box<dyn OutputFormatter> = if config.json {
+        Box::new(JsonFormatter::new(git_args.clone(), stdout))
+    } else {
+        Box::new(TerminalFormatter::new(stdout))
+    };
 
-                    status = match child_output.status.code() {
-                        Some(0) => GitStatus::SUCCESS,
-                        Some(_) => GitStatus::FAILURE,
-                        None => GitStatus::ERROR,
-                    };
-                    if !&child_output.stdout.is_empty() {
-                        writeln!(
-                            &mut output,
-                            "{}",
-                            String::from_utf8_lossy(&child_output.stdout)
-                        )
-                        .unwrap();
-                    }
-                    if !&child_output.stderr.is_empty() {
-                        writeln!(
-                            &mut output,
-                            "{}",
-                            String::from_utf8_lossy(&child_output.stderr)
-                        )
-                        .unwrap();
-                    }
-                }
-                Err(err) => {
-                    status = GitStatus::ERROR;
-                    writeln!(&mut output, "{}", err).unwrap();
-                }
-            }
+    formatter.render_header(&git_args, total);
 
-            tx.send((path, status, output))
-                .expect("Could not send data!");
-        });
+    if total == 0 {
+        return 0;
     }
 
-    let git_arguments: Vec<String> = env::args().skip(1).collect();
-    println!(
-        "Running 'git {}' on {} projects.",
-        git_arguments.join(" "),
-        count
-    );
-    Ok(())
-}
+    let cancel_token = CancellationToken::new();
 
-fn join(rx: Receiver<(PathBuf, GitStatus, String)>) -> Result<(), Error> {
-    let mut stdout = StandardStream::stdout(ColorChoice::Always);
-    let mut success = 0;
-    let mut failed = 0;
-    let mut errors = 0;
-    for (path, status, output) in rx.iter() {
-        let title_color = match status {
-            GitStatus::SUCCESS => {
-                success += 1;
-                Some(Color::Green)
-            }
-            GitStatus::FAILURE => {
-                failed += 1;
-                Some(Color::Yellow)
-            }
-            GitStatus::ERROR => {
-                errors += 1;
-                Some(Color::Red)
-            }
-        };
+    // Hook up Ctrl+C cancellation
+    let cancel_token_ctrlc = cancel_token.clone();
+    tokio::spawn(async move {
+        if tokio::signal::ctrl_c().await.is_ok() {
+            cancel_token_ctrlc.cancel();
+        }
+    });
 
-        stdout.set_color(ColorSpec::new().set_fg(title_color).set_bold(true))?;
-        writeln!(&mut stdout, "{}", path.display())?;
-        stdout.reset()?;
+    let (tx, rx) = mpsc::channel(config.jobs.max(1) * 2);
+    let git_args = Arc::new(git_args);
+    let config = Arc::new(config);
 
-        match status {
-            GitStatus::SUCCESS => {
-                write!(&mut stdout, "{}", output)?;
-            }
-            GitStatus::FAILURE | GitStatus::ERROR => {
-                write!(&mut stderr(), "{}", output)?;
-            }
-        };
+    // Spawn async worker pool
+    let worker_handle = tokio::spawn(run_engine(
+        repos,
+        git_args.clone(),
+        config.clone(),
+        cancel_token.clone(),
+        tx,
+    ));
+
+    // Stream and render results in strict sequential order
+    let stats = stream_in_order(total, rx, &config, formatter.as_ref()).await;
+    let _ = worker_handle.await;
+
+    formatter.render_summary(&stats, &config);
+
+    if stats.failure > 0 || stats.error > 0 {
+        1
+    } else {
+        0
     }
-
-    // Status line:
-    writeln!(&mut stdout)?;
-    stdout.set_color(ColorSpec::new().set_fg(Some(Color::Green)).set_bold(true))?;
-    write!(&mut stdout, "Success: ")?;
-    stdout.reset()?;
-    write!(&mut stdout, "{}", success)?;
-
-    if failed > 0 {
-        write!(&mut stdout, ", ")?;
-        stdout.set_color(ColorSpec::new().set_fg(Some(Color::Yellow)).set_bold(true))?;
-        write!(&mut stdout, "Warnings: ")?;
-        stdout.reset()?;
-        write!(&mut stdout, "{}", failed)?;
-    }
-
-    if errors > 0 {
-        write!(&mut stdout, ", ")?;
-        stdout.set_color(ColorSpec::new().set_fg(Some(Color::Red)).set_bold(true))?;
-        write!(&mut stdout, "Errors: ")?;
-        stdout.reset()?;
-        write!(&mut stdout, "{}", errors)?;
-    }
-    writeln!(&mut stdout)?;
-    Ok(())
 }

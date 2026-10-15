@@ -1,0 +1,154 @@
+name: Release Binaries
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_type:
+        description: 'Release type (nightly or release)'
+        required: true
+        default: 'nightly'
+        type: choice
+        options:
+          - nightly
+          - release
+      tag_name:
+        description: 'Tag name (optional, defaults to nightly or v<version>)'
+        required: false
+        default: ''
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build ${{ matrix.target }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Windows AMD64
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            artifact_name: mgit-windows-amd64.exe
+            use_cross: false
+
+          # Windows ARM64
+          - os: windows-latest
+            target: aarch64-pc-windows-msvc
+            artifact_name: mgit-windows-arm64.exe
+            use_cross: false
+
+          # Linux AMD64 (musl static binary)
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-musl
+            artifact_name: mgit-linux-amd64
+            use_cross: true
+
+          # Linux ARM64 (musl static binary)
+          - os: ubuntu-latest
+            target: aarch64-unknown-linux-musl
+            artifact_name: mgit-linux-arm64
+            use_cross: true
+
+          # macOS ARM64 (Apple Silicon)
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            artifact_name: mgit-macos-arm64
+            use_cross: false
+
+          # macOS AMD64 (Intel)
+          - os: macos-13
+            target: x86_64-apple-darwin
+            artifact_name: mgit-macos-amd64
+            use_cross: false
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Install cross (if needed)
+        if: matrix.use_cross
+        run: cargo install cross --git https://github.com/cross-rs/cross
+
+      - name: Build target (native cargo)
+        if: "!matrix.use_cross"
+        run: cargo build --release --target ${{ matrix.target }}
+
+      - name: Build target (cross)
+        if: matrix.use_cross
+        run: cross build --release --target ${{ matrix.target }}
+
+      - name: Prepare binary artifact (Windows)
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          mkdir -p artifacts
+          cp target/${{ matrix.target }}/release/mgit.exe artifacts/${{ matrix.artifact_name }}
+
+      - name: Prepare binary artifact (Unix)
+        if: runner.os != 'Windows'
+        run: |
+          mkdir -p artifacts
+          cp target/${{ matrix.target }}/release/mgit artifacts/${{ matrix.artifact_name }}
+          chmod +x artifacts/${{ matrix.artifact_name }}
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact_name }}
+          path: artifacts/${{ matrix.artifact_name }}
+
+  publish-release:
+    name: Publish Release Assets
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download all built artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release-assets
+          merge-multiple: true
+
+      - name: Determine tag name & release title
+        id: release_info
+        shell: bash
+        run: |
+          if [ -n "${{ inputs.tag_name }}" ]; then
+            TAG="${{ inputs.tag_name }}"
+          elif [ "${{ inputs.release_type }}" = "nightly" ]; then
+            TAG="nightly-$(date +'%Y%m%d%H%M')"
+          else
+            VERSION=$(grep -m1 '^version = ' Cargo.toml | cut -d '"' -f2)
+            TAG="v${VERSION}"
+          fi
+
+          IS_PRERELEASE=false
+          if [ "${{ inputs.release_type }}" = "nightly" ]; then
+            IS_PRERELEASE=true
+          fi
+
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          echo "is_prerelease=${IS_PRERELEASE}" >> "$GITHUB_OUTPUT"
+
+      - name: Create GitHub Release and Upload Assets
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.release_info.outputs.tag_name }}
+          name: "mgit ${{ steps.release_info.outputs.tag_name }}"
+          prerelease: ${{ steps.release_info.outputs.is_prerelease == 'true' }}
+          draft: false
+          files: release-assets/*
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
