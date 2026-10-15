@@ -9,7 +9,7 @@
 
 - [x] **Phase 1: Toolchain Modernization & Argument Parser Engine**
 - [x] **Phase 2: Repository Discovery Engine & Pruning**
-- [ ] **Phase 3: In-Order Output Streaming & Formatters**
+- [x] **Phase 3: In-Order Output Streaming & Formatters**
 - [ ] **Phase 4: Async Process Execution Engine (`tokio`)**
 - [ ] **Phase 5: CLI Integration & End-to-End Test Suite**
 
@@ -55,20 +55,20 @@
 ---
 
 ### Phase 3: In-Order Output Streaming & Formatters
-- [ ] Implement `src/output.rs`:
-  - [ ] `RepoStatus` and `RepoResult` structs
-  - [ ] `SummaryStats` metric accumulator
-  - [ ] `OutputFormatter` trait
-  - [ ] `TerminalFormatter` (using `anstream` & `anstyle` with `NO_COLOR` support)
-  - [ ] `JsonFormatter` (full AI-friendly JSON schema serialization)
-  - [ ] `stream_in_order` buffered sequential emitting algorithm
-- [ ] Unit Tests for `src/output.rs`:
-  - [ ] `test_in_order_streaming_out_of_order_arrival`
-  - [ ] `test_terminal_formatter_quiet_mode`
-  - [ ] `test_terminal_formatter_only_changes_mode`
-  - [ ] `test_terminal_formatter_failure_and_error`
-  - [ ] `test_json_formatter_valid_schema`
-  - [ ] `test_summary_only_mode`
+- [x] Implement `src/output.rs`:
+  - [x] `RepoStatus` and `RepoResult` structs
+  - [x] `SummaryStats` metric accumulator
+  - [x] `OutputFormatter` trait
+  - [x] `TerminalFormatter` (using `anstream` & `anstyle` with `NO_COLOR` support)
+  - [x] `JsonFormatter` (full AI-friendly JSON schema serialization)
+  - [x] `stream_in_order` buffered sequential emitting algorithm
+- [x] Unit Tests for `src/output.rs`:
+  - [x] `test_in_order_streaming_out_of_order_arrival`
+  - [x] `test_terminal_formatter_quiet_mode`
+  - [x] `test_terminal_formatter_only_changes_mode`
+  - [x] `test_terminal_formatter_failure_and_error`
+  - [x] `test_json_formatter_valid_schema`
+  - [x] `test_summary_only_mode`
 
 ---
 

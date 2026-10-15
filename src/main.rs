@@ -1,5 +1,6 @@
 pub mod args;
 pub mod discovery;
+pub mod output;
 
 use std::env;
 use std::fmt::Write as FmtWrite;

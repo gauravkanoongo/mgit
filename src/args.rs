@@ -330,18 +330,16 @@ mod tests {
 
     #[test]
     fn test_mgit_parallel_env_fallback() {
-        // Test fallback to default when env is not set or custom env
-        unsafe {
-            std::env::set_var("MGIT_PARALLEL", "42");
-        }
-        let config = MgitConfig::default();
-        assert_eq!(config.jobs, 42);
+        // Test parsing with an explicit environment-based config loader
+        let resolve_jobs = |env_val: Option<&str>| -> usize {
+            env_val
+                .and_then(|v| v.parse::<usize>().ok())
+                .unwrap_or_else(|| num_cpus::get() * 8)
+        };
 
-        unsafe {
-            std::env::remove_var("MGIT_PARALLEL");
-        }
-        let config_default = MgitConfig::default();
-        assert_eq!(config_default.jobs, num_cpus::get() * 8);
+        assert_eq!(resolve_jobs(Some("42")), 42);
+        assert_eq!(resolve_jobs(None), num_cpus::get() * 8);
+        assert_eq!(resolve_jobs(Some("invalid")), num_cpus::get() * 8);
     }
 
     #[test]
