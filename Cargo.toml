@@ -12,7 +12,7 @@ readme = "README.md"
 edition = "2024"
 
 [dependencies]
-tokio = { version = "1.43", features = ["macros", "rt-multi-thread", "process", "sync", "time"] }
+tokio = { version = "1.43", features = ["macros", "rt-multi-thread", "process", "sync", "time", "io-util", "signal"] }
 tokio-util = "0.7"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
@@ -22,9 +22,6 @@ num_cpus = "1.16"
 anstream = "0.6"
 anstyle = "1.0"
 
-# Retain existing dependencies while migrating other phases
-termcolor = "1.4"
-threadpool = "1.8"
 
 [dev-dependencies]
 tempfile = "3.17"

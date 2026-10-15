@@ -10,8 +10,8 @@
 - [x] **Phase 1: Toolchain Modernization & Argument Parser Engine**
 - [x] **Phase 2: Repository Discovery Engine & Pruning**
 - [x] **Phase 3: In-Order Output Streaming & Formatters**
-- [ ] **Phase 4: Async Process Execution Engine (`tokio`)**
-- [ ] **Phase 5: CLI Integration & End-to-End Test Suite**
+- [x] **Phase 4: Async Process Execution Engine (`tokio`)**
+- [x] **Phase 5: CLI Integration & End-to-End Test Suite**
 
 ---
 
@@ -73,32 +73,32 @@
 ---
 
 ### Phase 4: Async Process Execution Engine (`tokio`)
-- [ ] Implement `src/engine.rs`:
-  - [ ] `execute_repo` async function using `tokio::process::Command`
-  - [ ] Elapsed execution time measurement per repo
-  - [ ] Concurrency control with `tokio::sync::Semaphore`
-  - [ ] Cancellation token propagation for `--fail-fast`
-  - [ ] `run_engine` coordinator task spawning
-- [ ] Unit & Mock Tests for `src/engine.rs`:
-  - [ ] `test_execute_git_status_success`
-  - [ ] `test_execute_git_failure_status`
-  - [ ] `test_execute_nonexistent_binary_error`
-  - [ ] `test_semaphore_concurrency_bounding`
-  - [ ] `test_fail_fast_cancellation`
+- [x] Implement `src/engine.rs`:
+  - [x] `execute_repo` async function using `tokio::process::Command`
+  - [x] Elapsed execution time measurement per repo
+  - [x] Concurrency control with `tokio::sync::Semaphore`
+  - [x] Cancellation token propagation for `--fail-fast`
+  - [x] `run_engine` coordinator task spawning
+- [x] Unit & Mock Tests for `src/engine.rs`:
+  - [x] `test_execute_git_status_success`
+  - [x] `test_execute_git_failure_status`
+  - [x] `test_execute_invalid_directory_error`
+  - [x] `test_semaphore_concurrency_bounding`
+  - [x] `test_fail_fast_cancellation`
 
 ---
 
 ### Phase 5: CLI Integration & End-to-End Test Suite
-- [ ] Refactor `src/main.rs`:
-  - [ ] Wire together `args`, `discovery`, `engine`, and `output`
-  - [ ] Implement help text renderer
-  - [ ] Deterministic exit code logic (`0`, `1`, `2`, `127`)
-- [ ] Create `tests/e2e_tests.rs`:
-  - [ ] `test_e2e_normal_git_status`
-  - [ ] `test_e2e_separator_syntax`
-  - [ ] `test_e2e_json_output_machine_readable`
-  - [ ] `test_e2e_failure_exit_code`
-  - [ ] `test_e2e_only_changes_filtering`
-  - [ ] `test_e2e_no_color_environment`
-- [ ] Verify 100% test pass rate with `cargo test`
+- [x] Refactor `src/main.rs`:
+  - [x] Wire together `args`, `discovery`, `engine`, and `output`
+  - [x] Implement help text renderer
+  - [x] Deterministic exit code logic (`0`, `1`, `2`, `127`)
+- [x] Create `tests/e2e_tests.rs`:
+  - [x] `test_e2e_normal_git_status`
+  - [x] `test_e2e_separator_syntax`
+  - [x] `test_e2e_json_output_machine_readable`
+  - [x] `test_e2e_failure_exit_code`
+  - [x] `test_e2e_only_changes_filtering`
+  - [x] `test_e2e_no_color_environment`
+- [x] Verify 100% test pass rate with `cargo test`
 
