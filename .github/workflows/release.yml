@@ -116,20 +116,34 @@ jobs:
       - name: Determine tag name & release title
         id: release_info
         shell: bash
+        env:
+          INPUT_TAG: ${{ inputs.tag_name }}
+          INPUT_TYPE: ${{ inputs.release_type }}
         run: |
-          if [ -n "${{ inputs.tag_name }}" ]; then
-            TAG="${{ inputs.tag_name }}"
-          elif [ "${{ inputs.release_type }}" = "nightly" ]; then
-            TAG="nightly-$(date +'%Y%m%d%H%M')"
+          set -euo pipefail
+
+          # Extract version from Cargo.toml as reliable fallback
+          CARGO_VERSION=$(grep -m1 '^version = ' Cargo.toml | sed -E 's/.*"([^"]+)".*/\1/' || echo "0.2.0")
+          TIMESTAMP=$(date -u +'%Y%m%d%H%M')
+
+          if [ -n "${INPUT_TAG:-}" ]; then
+            TAG="$INPUT_TAG"
+            IS_PRERELEASE="false"
+          elif [ "${INPUT_TYPE:-}" = "release" ]; then
+            TAG="v${CARGO_VERSION}"
+            IS_PRERELEASE="false"
           else
-            VERSION=$(grep -m1 '^version = ' Cargo.toml | cut -d '"' -f2)
-            TAG="v${VERSION}"
+            # Default to nightly
+            TAG="nightly-${TIMESTAMP}"
+            IS_PRERELEASE="true"
           fi
 
-          IS_PRERELEASE=false
-          if [ "${{ inputs.release_type }}" = "nightly" ]; then
-            IS_PRERELEASE=true
+          # Absolute safety guarantee: TAG can NEVER be empty
+          if [ -z "$TAG" ]; then
+            TAG="v${CARGO_VERSION}-${TIMESTAMP}"
           fi
+
+          echo "Selected Tag: $TAG (prerelease: $IS_PRERELEASE)"
 
           echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
           echo "is_prerelease=${IS_PRERELEASE}" >> "$GITHUB_OUTPUT"
@@ -137,12 +151,13 @@ jobs:
       - name: Create GitHub Release and Upload Assets
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ steps.release_info.outputs.tag_name }}
-          name: "mgit ${{ steps.release_info.outputs.tag_name }}"
+          tag_name: ${{ steps.release_info.outputs.tag }}
+          name: "mgit ${{ steps.release_info.outputs.tag }}"
           prerelease: ${{ steps.release_info.outputs.is_prerelease == 'true' }}
           draft: false
           files: release-assets/*
           generate_release_notes: true
+          overwrite_files: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
