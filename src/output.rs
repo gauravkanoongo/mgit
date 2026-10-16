@@ -3,7 +3,8 @@ use std::io::Write;
 use std::sync::{Arc, Mutex};
 use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc;
-use anstyle::{AnsiColor, Color, Style};
+use anstyle::{Color, Style};
+use indicatif::{ProgressBar, ProgressStyle};
 
 use crate::args::MgitConfig;
 
@@ -47,17 +48,19 @@ impl SummaryStats {
             RepoStatus::Failure => self.failure += 1,
             RepoStatus::Error => self.error += 1,
         }
+        self.elapsed_ms += result.elapsed_ms;
     }
 }
 
 /// Abstract formatter for rendering output.
 pub trait OutputFormatter: Send + Sync {
+    fn render_banner(&self, config: &MgitConfig);
     fn render_header(&self, command: &[String], count: usize);
     fn render_repo(&self, result: &RepoResult, config: &MgitConfig);
     fn render_summary(&self, stats: &SummaryStats, config: &MgitConfig);
 }
 
-/// Human-readable terminal output formatter with ANSI color support.
+/// Human-readable terminal output formatter with elegant pastel/royal ANSI colors and clear separators.
 pub struct TerminalFormatter<W: Write + Send + Sync> {
     writer: Arc<Mutex<W>>,
 }
@@ -70,10 +73,47 @@ impl<W: Write + Send + Sync> TerminalFormatter<W> {
     }
 }
 
+// Royal & Pastel styles using standard 256/ANSI codes
+const ACCENT_BLUE: Style = Style::new().fg_color(Some(Color::Ansi256(anstyle::Ansi256Color(111)))).bold(); // Soft Cornflower / Royal Blue
+const ACCENT_CYAN: Style = Style::new().fg_color(Some(Color::Ansi256(anstyle::Ansi256Color(117)))); // Soft Pastel Cyan
+const PASTEL_GREEN: Style = Style::new().fg_color(Some(Color::Ansi256(anstyle::Ansi256Color(114)))).bold(); // Soft Mint Green
+const PASTEL_PEACH: Style = Style::new().fg_color(Some(Color::Ansi256(anstyle::Ansi256Color(216)))).bold(); // Soft Amber/Peach Warning
+const PASTEL_ROSE: Style = Style::new().fg_color(Some(Color::Ansi256(anstyle::Ansi256Color(210)))).bold();  // Soft Rose/Coral Error
+const DIM_GRAY: Style = Style::new().fg_color(Some(Color::Ansi256(anstyle::Ansi256Color(240))));    // Dark Gray Dimmed Separator
+const DIM_LABEL: Style = Style::new().fg_color(Some(Color::Ansi256(anstyle::Ansi256Color(245))));   // Subtle Dim Label
+
 impl<W: Write + Send + Sync> OutputFormatter for TerminalFormatter<W> {
+    fn render_banner(&self, config: &MgitConfig) {
+        if config.quiet || config.no_banner || config.summary_only {
+            return;
+        }
+
+        let mut out = self.writer.lock().unwrap();
+
+        // Lightweight, lowercase small-caps ASCII banner for "mgit"
+        let banner_lines = [
+            r"                  _ _   ",
+            r"  _ __ ___   __ _(_) |_ ",
+            r" | '_ ` _ \ / _` | | __|",
+            r" | | | | | | (_| | | |_ ",
+            r" |_| |_| |_|\__, |_|\__|",
+            r"            |___/       ",
+        ];
+
+        let _ = writeln!(out);
+        for line in banner_lines {
+            let _ = writeln!(out, "{ACCENT_BLUE}{line}{ACCENT_BLUE:#}");
+        }
+        let _ = writeln!(out, "  {DIM_LABEL}v{} · async parallel git orchestrator{DIM_LABEL:#}\n", env!("CARGO_PKG_VERSION"));
+    }
+
     fn render_header(&self, command: &[String], count: usize) {
         let mut out = self.writer.lock().unwrap();
-        let _ = writeln!(out, "Running 'git {}' on {} projects.", command.join(" "), count);
+        let _ = writeln!(
+            out,
+            "⚡ {ACCENT_CYAN}Running{ACCENT_CYAN:#} 'git {}' {DIM_LABEL}on{DIM_LABEL:#} {ACCENT_BLUE}{count}{ACCENT_BLUE:#} {DIM_LABEL}projects...{DIM_LABEL:#}\n",
+            command.join(" ")
+        );
     }
 
     fn render_repo(&self, result: &RepoResult, config: &MgitConfig) {
@@ -92,13 +132,23 @@ impl<W: Write + Send + Sync> OutputFormatter for TerminalFormatter<W> {
 
         let mut out = self.writer.lock().unwrap();
 
-        let header_style = match result.status {
-            RepoStatus::Success => Style::new().fg_color(Some(Color::Ansi(AnsiColor::Green))).bold(),
-            RepoStatus::Failure => Style::new().fg_color(Some(Color::Ansi(AnsiColor::Yellow))).bold(),
-            RepoStatus::Error => Style::new().fg_color(Some(Color::Ansi(AnsiColor::Red))).bold(),
+        let (icon, header_style) = match result.status {
+            RepoStatus::Success => ("✔", PASTEL_GREEN),
+            RepoStatus::Failure => ("▲", PASTEL_PEACH),
+            RepoStatus::Error => ("✖", PASTEL_ROSE),
         };
 
-        let _ = writeln!(out, "{header_style}{}{header_style:#}", result.repo);
+        // Header line with repo path and optional timer badge
+        if config.timer {
+            let _ = writeln!(
+                out,
+                "{header_style}{icon} {}{header_style:#} {DIM_LABEL}[{}ms]{DIM_LABEL:#}",
+                result.repo,
+                result.elapsed_ms
+            );
+        } else {
+            let _ = writeln!(out, "{header_style}{icon} {}{header_style:#}", result.repo);
+        }
 
         if !result.stdout.is_empty() {
             let _ = write!(out, "{}", result.stdout);
@@ -106,23 +156,33 @@ impl<W: Write + Send + Sync> OutputFormatter for TerminalFormatter<W> {
         if !result.stderr.is_empty() {
             let _ = write!(out, "{}", result.stderr);
         }
+
+        // Clean, lightweight dark gray dimmed dashed separator line
+        let _ = writeln!(out, "{DIM_GRAY}┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈{DIM_GRAY:#}");
     }
 
-    fn render_summary(&self, stats: &SummaryStats, _config: &MgitConfig) {
+    fn render_summary(&self, stats: &SummaryStats, config: &MgitConfig) {
         let mut out = self.writer.lock().unwrap();
-        let green = Style::new().fg_color(Some(Color::Ansi(AnsiColor::Green))).bold();
-        let yellow = Style::new().fg_color(Some(Color::Ansi(AnsiColor::Yellow))).bold();
-        let red = Style::new().fg_color(Some(Color::Ansi(AnsiColor::Red))).bold();
 
         let _ = writeln!(out);
-        let _ = write!(out, "{green}Success: {}{green:#}", stats.success);
+        let _ = write!(out, "✨ {PASTEL_GREEN}Success: {}{PASTEL_GREEN:#}", stats.success);
 
         if stats.failure > 0 {
-            let _ = write!(out, ", {yellow}Warnings: {}{yellow:#}", stats.failure);
+            let _ = write!(out, " · {PASTEL_PEACH}Warnings: {}{PASTEL_PEACH:#}", stats.failure);
         }
 
         if stats.error > 0 {
-            let _ = write!(out, ", {red}Errors: {}{red:#}", stats.error);
+            let _ = write!(out, " · {PASTEL_ROSE}Errors: {}{PASTEL_ROSE:#}", stats.error);
+        }
+
+        if config.timer && stats.total > 0 {
+            let avg = stats.elapsed_ms / stats.total as u64;
+            let _ = write!(
+                out,
+                " · {DIM_LABEL}Total: {:.2}s (avg: {}ms/repo){DIM_LABEL:#}",
+                stats.elapsed_ms as f64 / 1000.0,
+                avg
+            );
         }
 
         let _ = writeln!(out);
@@ -156,9 +216,8 @@ impl<W: Write + Send + Sync> JsonFormatter<W> {
 }
 
 impl<W: Write + Send + Sync> OutputFormatter for JsonFormatter<W> {
-    fn render_header(&self, _command: &[String], _count: usize) {
-        // Headers are omitted in JSON mode so stdout remains clean parsable JSON
-    }
+    fn render_banner(&self, _config: &MgitConfig) {}
+    fn render_header(&self, _command: &[String], _count: usize) {}
 
     fn render_repo(&self, result: &RepoResult, config: &MgitConfig) {
         if config.only_changes && !result.has_changes && result.status == RepoStatus::Success {
@@ -193,11 +252,15 @@ impl<W: Write + Send + Sync> OutputFormatter for JsonFormatter<W> {
 }
 
 /// Consumes completed repository results from workers and guarantees strict in-order sequential output.
+///
+/// When `progress_bar` is provided (interactive TTY), completed repos are printed above the spinner
+/// and the colorful status line dynamically tracks progress without interfering with stdout.
 pub async fn stream_in_order(
     total: usize,
     mut rx: mpsc::Receiver<RepoResult>,
     config: &MgitConfig,
     formatter: &dyn OutputFormatter,
+    progress_bar: Option<&ProgressBar>,
 ) -> SummaryStats {
     let mut pending = HashMap::<usize, RepoResult>::new();
     let mut next_expected_id = 0;
@@ -208,6 +271,13 @@ pub async fn stream_in_order(
         if let Some(result) = pending.remove(&next_expected_id) {
             stats.record(&result);
             formatter.render_repo(&result, config);
+            if let Some(pb) = progress_bar {
+                pb.inc(1);
+                pb.set_message(format!(
+                    "✨ [{}✔ {}▲ {}✖]",
+                    stats.success, stats.failure, stats.error
+                ));
+            }
             next_expected_id += 1;
             continue;
         }
@@ -218,6 +288,13 @@ pub async fn stream_in_order(
                 if result.id == next_expected_id {
                     stats.record(&result);
                     formatter.render_repo(&result, config);
+                    if let Some(pb) = progress_bar {
+                        pb.inc(1);
+                        pb.set_message(format!(
+                            "✨ [{}✔ {}▲ {}✖]",
+                            stats.success, stats.failure, stats.error
+                        ));
+                    }
                     next_expected_id += 1;
                 } else {
                     pending.insert(result.id, result);
@@ -227,7 +304,24 @@ pub async fn stream_in_order(
         }
     }
 
+    if let Some(pb) = progress_bar {
+        pb.finish_and_clear();
+    }
+
     stats
+}
+
+/// Creates a colorful interactive dotted spinner and progress line for TTY sessions.
+pub fn create_progress_bar(total: usize) -> ProgressBar {
+    let pb = ProgressBar::new(total as u64);
+    pb.set_style(
+        ProgressStyle::default_bar()
+            .template("{spinner:.cyan} [{pos}/{len}] {bar:25.blue/dim} {msg} ({elapsed})")
+            .unwrap()
+            .tick_chars("⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"),
+    );
+    pb.enable_steady_tick(std::time::Duration::from_millis(80));
+    pb
 }
 
 #[cfg(test)]
@@ -265,6 +359,7 @@ mod tests {
 
         struct BufferFormatter(Arc<Mutex<Vec<String>>>);
         impl OutputFormatter for BufferFormatter {
+            fn render_banner(&self, _: &MgitConfig) {}
             fn render_header(&self, _: &[String], _: usize) {}
             fn render_repo(&self, result: &RepoResult, _: &MgitConfig) {
                 self.0.lock().unwrap().push(result.repo.clone());
@@ -275,7 +370,7 @@ mod tests {
         let recorded = Arc::new(Mutex::new(Vec::new()));
         let formatter = BufferFormatter(recorded.clone());
 
-        let stats = stream_in_order(3, rx, &config, &formatter).await;
+        let stats = stream_in_order(3, rx, &config, &formatter, None).await;
         assert_eq!(stats.total, 3);
         assert_eq!(stats.success, 3);
 
@@ -415,5 +510,19 @@ mod tests {
 
         let summary_out = String::from_utf8(formatter.writer.lock().unwrap().clone()).unwrap();
         assert!(summary_out.contains("Success: 1"));
+    }
+
+    #[test]
+    fn test_timer_switch_display() {
+        let buffer = Vec::new();
+        let formatter = TerminalFormatter::new(buffer);
+        let mut config = MgitConfig::default();
+        config.timer = true;
+
+        let res = dummy_result(0, "my_repo", RepoStatus::Success, "clean\n");
+        formatter.render_repo(&res, &config);
+
+        let out = String::from_utf8(formatter.writer.lock().unwrap().clone()).unwrap();
+        assert!(out.contains("[50ms]"));
     }
 }

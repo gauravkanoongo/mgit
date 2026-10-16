@@ -48,6 +48,10 @@ pub struct MgitConfig {
     pub fail_fast: bool,
     /// Maximum directory traversal depth.
     pub max_depth: Option<usize>,
+    /// Display execution duration timings.
+    pub timer: bool,
+    /// Suppress ASCII banner.
+    pub no_banner: bool,
 }
 
 impl Default for MgitConfig {
@@ -66,6 +70,8 @@ impl Default for MgitConfig {
             summary_only: false,
             fail_fast: false,
             max_depth: None,
+            timer: false,
+            no_banner: false,
         }
     }
 }
@@ -89,6 +95,8 @@ pub fn help_text() -> &'static str {
         "    --json                Output structured JSON (AI and machine-readable)\n",
         "    --summary-only        Print only the final summary statistics\n",
         "    --fail-fast           Cancel remaining running jobs on first failure\n",
+        "    --timer               Display execution duration timings\n",
+        "    --no-banner           Suppress ASCII banner\n",
         "    -d, --max-depth <N>   Limit directory traversal depth\n",
         "    -h, --help            Show this help information\n\n",
         "EXAMPLES:\n",
@@ -187,6 +195,12 @@ fn parse_mgit_options(raw_args: &[String], config: &mut MgitConfig) -> Result<()
             Long("fail-fast") => {
                 config.fail_fast = true;
             }
+            Long("timer") => {
+                config.timer = true;
+            }
+            Long("no-banner") => {
+                config.no_banner = true;
+            }
             Short('d') | Long("max-depth") => {
                 let val = parser
                     .value()
@@ -265,6 +279,8 @@ mod tests {
             "--json",
             "--summary-only",
             "--fail-fast",
+            "--timer",
+            "--no-banner",
             "-d",
             "3",
         ]);
@@ -277,6 +293,8 @@ mod tests {
         assert!(config.json);
         assert!(config.summary_only);
         assert!(config.fail_fast);
+        assert!(config.timer);
+        assert!(config.no_banner);
         assert_eq!(config.max_depth, Some(3));
     }
 
