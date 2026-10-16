@@ -253,8 +253,8 @@ impl<W: Write + Send + Sync> OutputFormatter for JsonFormatter<W> {
 
 /// Consumes completed repository results from workers and guarantees strict in-order sequential output.
 ///
-/// When `progress_bar` is provided (interactive TTY), completed repos are printed above the spinner
-/// and the colorful status line dynamically tracks progress without interfering with stdout.
+/// When `progress_bar` is provided (interactive TTY), completed repo output is printed above one
+/// live status line. The line is cleared when streaming finishes, before the final summary.
 pub async fn stream_in_order(
     total: usize,
     mut rx: mpsc::Receiver<RepoResult>,
@@ -270,7 +270,7 @@ pub async fn stream_in_order(
         // Check if next item is already in pending buffer
         if let Some(result) = pending.remove(&next_expected_id) {
             stats.record(&result);
-            formatter.render_repo(&result, config);
+            render_repo_with_progress(&result, config, formatter, progress_bar);
             if let Some(pb) = progress_bar {
                 pb.inc(1);
                 pb.set_message(format!(
@@ -287,7 +287,7 @@ pub async fn stream_in_order(
             Some(result) => {
                 if result.id == next_expected_id {
                     stats.record(&result);
-                    formatter.render_repo(&result, config);
+                    render_repo_with_progress(&result, config, formatter, progress_bar);
                     if let Some(pb) = progress_bar {
                         pb.inc(1);
                         pb.set_message(format!(
@@ -309,6 +309,19 @@ pub async fn stream_in_order(
     }
 
     stats
+}
+
+fn render_repo_with_progress(
+    result: &RepoResult,
+    config: &MgitConfig,
+    formatter: &dyn OutputFormatter,
+    progress_bar: Option<&ProgressBar>,
+) {
+    if let Some(pb) = progress_bar {
+        pb.suspend(|| formatter.render_repo(result, config));
+    } else {
+        formatter.render_repo(result, config);
+    }
 }
 
 /// Creates a colorful interactive dotted spinner and progress line for TTY sessions.
@@ -370,7 +383,8 @@ mod tests {
         let recorded = Arc::new(Mutex::new(Vec::new()));
         let formatter = BufferFormatter(recorded.clone());
 
-        let stats = stream_in_order(3, rx, &config, &formatter, None).await;
+        let progress_bar = ProgressBar::hidden();
+        let stats = stream_in_order(3, rx, &config, &formatter, Some(&progress_bar)).await;
         assert_eq!(stats.total, 3);
         assert_eq!(stats.success, 3);
 

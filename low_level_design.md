@@ -255,6 +255,11 @@ pub async fn stream_in_order(
 }
 ```
 
+In an interactive TTY, the streamer suspends the progress display while each completed repository
+is rendered, then redraws the same live status line with updated progress. This keeps repository
+output scrolling above a single status line. The line is cleared after streaming; non-interactive
+and JSON output do not use terminal cursor updates.
+
 #### Output Formats:
 
 ##### 1. Human-Readable Terminal Formatter:
@@ -262,6 +267,8 @@ pub async fn stream_in_order(
 - Standardizes stdout/stderr flush per repo atomically.
 - Respects `--quiet` (skips rendering clean repos) and `--only-changes` (skips repos with empty stdout).
 - Automatic color suppression on `NO_COLOR=1` or non-TTY pipes via `anstream` / `supports-color`.
+- In interactive TTY mode, suspends the live progress line while printing repository output and
+  redraws that same line afterward. Clears it before the final summary.
 
 ##### 2. AI / Machine-Readable JSON Formatter (`--json`):
 Outputs a top-level JSON document containing execution metadata and individual repo results:
@@ -369,4 +376,3 @@ tempfile = "3.17"       # For hermetic integration tests
 3. `tests::test_exit_codes`:
    - Run a command that fails in one repo (e.g. `mgit checkout non-existent-branch`).
    - Verify process exits with code `1`.
-

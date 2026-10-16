@@ -64,6 +64,11 @@ Output consumer awaits items in strict index sequence: 0, 1, 2, ...
 2. **Instant Printing:** If Repo 0 finishes quickly, output begins streaming to the terminal immediately without waiting for the entire batch.
 3. **No Terminal Scrambling:** Repositories never interleave their stdout/stderr.
 
+For interactive terminals, maintain one updating progress/status line. Suspend it while printing
+each repository's output so output scrolls above the line, then redraw it with updated progress and
+counts. Clear the live line when execution finishes and print the normal final summary. Piped and
+JSON output remain free of interactive cursor movement.
+
 ---
 
 ## 3. Making `mgit` AI-Agent & Automated Workflow Friendly
