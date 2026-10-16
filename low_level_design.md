@@ -258,7 +258,8 @@ pub async fn stream_in_order(
 In an interactive TTY, the streamer suspends the progress display while each completed repository
 is rendered, then redraws the same live status line with updated progress. This keeps repository
 output scrolling above a single status line. The line is cleared after streaming; non-interactive
-and JSON output do not use terminal cursor updates.
+and JSON output do not use terminal cursor updates. The progress display and human-readable
+formatter must share stdout so suspension and redraw control the same terminal cursor.
 
 #### Output Formats:
 

@@ -4,7 +4,7 @@ use std::sync::{Arc, Mutex};
 use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc;
 use anstyle::{Color, Style};
-use indicatif::{ProgressBar, ProgressStyle};
+use indicatif::{ProgressBar, ProgressDrawTarget, ProgressStyle};
 
 use crate::args::MgitConfig;
 
@@ -327,6 +327,7 @@ fn render_repo_with_progress(
 /// Creates a colorful interactive dotted spinner and progress line for TTY sessions.
 pub fn create_progress_bar(total: usize) -> ProgressBar {
     let pb = ProgressBar::new(total as u64);
+    pb.set_draw_target(ProgressDrawTarget::stdout());
     pb.set_style(
         ProgressStyle::default_bar()
             .template("{spinner:.cyan} [{pos}/{len}] {bar:25.blue/dim} {msg} ({elapsed})")

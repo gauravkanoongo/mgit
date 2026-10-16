@@ -67,7 +67,8 @@ Output consumer awaits items in strict index sequence: 0, 1, 2, ...
 For interactive terminals, maintain one updating progress/status line. Suspend it while printing
 each repository's output so output scrolls above the line, then redraw it with updated progress and
 counts. Clear the live line when execution finishes and print the normal final summary. Piped and
-JSON output remain free of interactive cursor movement.
+JSON output remain free of interactive cursor movement. Progress and repository output must use
+the same output stream so suspension and redraw operate on the same terminal cursor.
 
 ---
 
