@@ -6,6 +6,8 @@
 
 Fast, asynchronous multi-repository Git CLI utility with guaranteed deterministic in-order output, intelligent directory pruning, and first-class AI-agent workflow support.
 
+[Documentation index](./index.md) · [UI design deliberations](./ui-deliberations.md)
+
 ---
 
 ## Features
@@ -13,6 +15,7 @@ Fast, asynchronous multi-repository Git CLI utility with guaranteed deterministi
 - **Fully Asynchronous (`tokio`)**: Runs parallel Git operations across dozens/hundreds of repositories without spawning unbounded OS thread stacks.
 - **Strict In-Order Sequential Output**: Concurrently executes tasks, but buffers and streams stdout/stderr in deterministic alphabetical repository order.
 - **Interactive Streaming Output**: In terminals, repository output streams line by line in deterministic repository order. No progress bar or cursor control is used; non-interactive and JSON output retain their buffered behavior.
+- **Optional Inline UI (planned)**: A future opt-in inline view for live status/progress and scrollable command output is under design; it is not implemented yet. See [UI deliberations](./ui-deliberations.md).
 - **Unambiguous Argument Model**: All arguments before the **last `--`** go to `git`; options after the **last `--`** configure `mgit`.
 - **Fast Directory Pruning**: Avoids traversing into `.git/`, `node_modules/`, `target/`, `.cargo/`, `vendor/`, `build/`, and virtual environments.
 - **Worktree & Submodule Support**: Automatically identifies both `.git` directories and `.git` pointer files (`gitdir: ...`).

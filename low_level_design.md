@@ -262,15 +262,45 @@ No progress bar or terminal cursor control is used. Filtered modes buffer a repo
 result is known so suppressed output is never shown. Non-interactive and JSON output use the
 existing buffered result path.
 
+#### Optional inline terminal UI (planned; not implemented)
+
+When explicitly requested and attached to an interactive terminal, a future UI mode will render
+an inline Ratatui viewport using a Crossterm backend. Its layout has a top status/progress row and
+a scrollable command-output region below. This is not the default path and does not change the
+existing behavior for JSON, redirected output, or invocations without the UI option.
+
+The UI consumes progress and output events from the execution pipeline. It must not become a
+blocking dependency of the process-output readers or reduce the configured job concurrency.
+Progress is indeterminate during discovery, then uses the discovered repository total and advances
+on repo completion. Coalesce UI updates and redraw at a bounded rate.
+
+Capture stdout/stderr in one in-memory event store, tagged with repository ID and stream identity,
+so live rendering and exit replay share data without duplicate per-repo and aggregate copies. The
+complete output is retained until exit in order to replay it to normal terminal output; peak
+memory therefore scales with total command output. Preserve repository display order. Separate
+stdout/stderr pipes cannot provide perfect original cross-stream chronology.
+
+After work finishes or cancellation is handled, restore terminal modes/cursor and replay the
+captured output as ordinary terminal output so it appears in the terminal emulator's scrollback.
+This is a replay, not migration of the TUI widget's in-memory scroll state. Every normal, error,
+Ctrl+C, and fail-fast path must restore the terminal. Children requiring interactive terminal
+input/PTY semantics are outside the initial scope.
+
+The final flag spelling and fallback behavior if the requested TUI cannot start remain open.
+Implementation tradeoffs and the alternatives considered are recorded in
+[`ui-deliberations.md`](./ui-deliberations.md).
+
 #### Output Formats:
 
 ##### 1. Human-Readable Terminal Formatter:
 - Uses colored path headers in buffered output. Interactive output labels the current repository,
-  streams its stdout/stderr lines above the progress bar, and does not interleave different repos.
+  streams its stdout/stderr lines directly, and does not interleave different repos.
 - Respects `--quiet` (skips rendering clean repos) and `--only-changes` (skips repos with empty stdout).
 - Automatic color suppression on `NO_COLOR=1` or non-TTY pipes via `anstream` / `supports-color`.
 - In interactive TTY mode, writes each output line directly and flushes it so it appears while the
   command runs.
+- The planned inline UI is a separate opt-in renderer; do not route its screen-control output
+  through the plain terminal formatter.
 
 ##### 2. AI / Machine-Readable JSON Formatter (`--json`):
 Outputs a top-level JSON document containing execution metadata and individual repo results:

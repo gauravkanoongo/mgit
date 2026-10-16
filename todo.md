@@ -102,3 +102,14 @@
   - [x] `test_e2e_no_color_environment`
 - [x] Verify 100% test pass rate with `cargo test`
 
+---
+
+## Planned: Optional Inline Output UI
+
+Design and constraints are documented in [`ui-deliberations.md`](./ui-deliberations.md) and the UI section of [`low_level_design.md`](./low_level_design.md).
+
+- [ ] Resolve the open product decisions in `ui-deliberations.md` (flag and fallback behavior, scroll-follow interaction, stream presentation, summary placement, and terminal test matrix).
+- [ ] Implement opt-in inline status/progress and scrollable stdout/stderr rendering without changing default, JSON, or non-TTY behavior.
+- [ ] Capture output once in memory for live rendering and complete replay on exit; preserve repository order and keep rendering from blocking output readers or job concurrency.
+- [ ] Restore terminal state on normal completion, errors, Ctrl+C, and fail-fast cancellation.
+- [ ] Add focused unit/integration tests and pseudo-terminal coverage where supported; run the existing test suite.
