@@ -168,6 +168,7 @@ impl<W: Write + Send + Sync> OutputFormatter for TerminalFormatter<W> {
                 let _ = writeln!(out, "{PASTEL_ROSE}✖ command error{PASTEL_ROSE:#}");
             }
         }
+        let _ = writeln!(out, "{DIM_GRAY}┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈{DIM_GRAY:#}");
         let _ = out.flush();
     }
 
@@ -522,6 +523,7 @@ mod tests {
         let output = String::from_utf8(formatter.writer.lock().unwrap().clone()).unwrap();
         assert!(output.contains("repo"));
         assert!(output.contains("On branch main"));
+        assert!(output.contains("┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈"));
         assert!(!output.contains('█'));
         assert!(!output.contains('\r'));
     }
