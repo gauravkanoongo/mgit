@@ -58,14 +58,9 @@ async fn run() -> i32 {
         return 0;
     }
 
-    // Use the coordinated live status line only for interactive human-readable output.
+    // Stream output as it arrives only for interactive human-readable output.
     use std::io::IsTerminal;
     let is_interactive = std::io::stdout().is_terminal() && !config.json && !config.quiet && !config.summary_only;
-    let progress = if is_interactive {
-        Some(output::create_progress_bar(total))
-    } else {
-        None
-    };
 
     let cancel_token = CancellationToken::new();
 
@@ -80,7 +75,7 @@ async fn run() -> i32 {
     let git_args = Arc::new(git_args);
     let config = Arc::new(config);
 
-    let stats = if let Some(progress) = progress.as_ref() {
+    let stats = if is_interactive {
         let (tx, rx) = mpsc::unbounded_channel();
         let worker_handle = tokio::spawn(run_engine_streaming(
             repos,
@@ -89,7 +84,7 @@ async fn run() -> i32 {
             cancel_token.clone(),
             tx,
         ));
-        let stats = stream_events_in_order(rx, &config, formatter.as_ref(), progress).await;
+        let stats = stream_events_in_order(rx, &config, formatter.as_ref()).await;
         let _ = worker_handle.await;
         stats
     } else {

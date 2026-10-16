@@ -12,7 +12,7 @@ Fast, asynchronous multi-repository Git CLI utility with guaranteed deterministi
 
 - **Fully Asynchronous (`tokio`)**: Runs parallel Git operations across dozens/hundreds of repositories without spawning unbounded OS thread stacks.
 - **Strict In-Order Sequential Output**: Concurrently executes tasks, but buffers and streams stdout/stderr in deterministic alphabetical repository order.
-- **Single Interactive Status Line**: In terminals, one coordinated status bar stays below scrolling repository output, which streams line by line in deterministic repository order. The bar clears before the final summary. Non-interactive and JSON output remain unchanged.
+- **Interactive Streaming Output**: In terminals, repository output streams line by line in deterministic repository order. No progress bar or cursor control is used; non-interactive and JSON output retain their buffered behavior.
 - **Unambiguous Argument Model**: All arguments before the **last `--`** go to `git`; options after the **last `--`** configure `mgit`.
 - **Fast Directory Pruning**: Avoids traversing into `.git/`, `node_modules/`, `target/`, `.cargo/`, `vendor/`, `build/`, and virtual environments.
 - **Worktree & Submodule Support**: Automatically identifies both `.git` directories and `.git` pointer files (`gitdir: ...`).

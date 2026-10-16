@@ -257,10 +257,10 @@ pub async fn stream_in_order(
 
 In an interactive TTY, repository workers emit start, output-line, and completion events. The
 streamer buffers events from later repositories until their index is next, then prints each line
-above one `indicatif::MultiProgress` status bar. This preserves deterministic ordering while
-streaming the current repository's output. Filtered modes buffer a repository until its result is
-known so suppressed output is never shown. The status bar is cleared after streaming; non-interactive
-and JSON output use the existing buffered result path.
+directly. This preserves deterministic ordering while streaming the current repository's output.
+No progress bar or terminal cursor control is used. Filtered modes buffer a repository until its
+result is known so suppressed output is never shown. Non-interactive and JSON output use the
+existing buffered result path.
 
 #### Output Formats:
 
@@ -269,8 +269,8 @@ and JSON output use the existing buffered result path.
   streams its stdout/stderr lines above the progress bar, and does not interleave different repos.
 - Respects `--quiet` (skips rendering clean repos) and `--only-changes` (skips repos with empty stdout).
 - Automatic color suppression on `NO_COLOR=1` or non-TTY pipes via `anstream` / `supports-color`.
-- In interactive TTY mode, uses `MultiProgress::println` to keep the status bar below streamed
-  repository output. Clears it before the final summary.
+- In interactive TTY mode, writes each output line directly and flushes it so it appears while the
+  command runs.
 
 ##### 2. AI / Machine-Readable JSON Formatter (`--json`):
 Outputs a top-level JSON document containing execution metadata and individual repo results:

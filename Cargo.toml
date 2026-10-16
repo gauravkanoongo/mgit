@@ -21,8 +21,5 @@ walkdir = "2.5"
 num_cpus = "1.16"
 anstream = "0.6"
 anstyle = "1.0"
-indicatif = "0.17"
-
-
 [dev-dependencies]
 tempfile = "3.17"

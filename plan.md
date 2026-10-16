@@ -64,12 +64,11 @@ Output consumer awaits items in strict index sequence: 0, 1, 2, ...
 2. **Instant Printing:** If Repo 0 finishes quickly, output begins streaming to the terminal immediately without waiting for the entire batch.
 3. **No Terminal Scrambling:** Repositories never interleave their stdout/stderr.
 
-For interactive terminals, maintain one updating progress/status line using a coordinated
-`indicatif::MultiProgress`. Stream output lines above it, while buffering events from later
+For interactive terminals, stream output lines directly while buffering events from later
 repositories until earlier repository output is complete. This preserves deterministic ordering
-without waiting for each whole command to finish. Filtered output remains buffered until its
-visibility is known. Clear the live line when execution finishes and print the normal final summary.
-Piped and JSON output remain on the existing non-interactive path.
+without waiting for each whole command to finish. Do not use a progress bar or terminal cursor
+control. Filtered output remains buffered until its visibility is known. Print the normal final
+summary when execution finishes. Piped and JSON output remain on the existing non-interactive path.
 
 ---
 
