@@ -255,21 +255,22 @@ pub async fn stream_in_order(
 }
 ```
 
-In an interactive TTY, the streamer suspends the progress display while each completed repository
-is rendered, then redraws the same live status line with updated progress. This keeps repository
-output scrolling above a single status line. The line is cleared after streaming; non-interactive
-and JSON output do not use terminal cursor updates. The progress display and human-readable
-formatter must share stdout so suspension and redraw control the same terminal cursor.
+In an interactive TTY, repository workers emit start, output-line, and completion events. The
+streamer buffers events from later repositories until their index is next, then prints each line
+above one `indicatif::MultiProgress` status bar. This preserves deterministic ordering while
+streaming the current repository's output. Filtered modes buffer a repository until its result is
+known so suppressed output is never shown. The status bar is cleared after streaming; non-interactive
+and JSON output use the existing buffered result path.
 
 #### Output Formats:
 
 ##### 1. Human-Readable Terminal Formatter:
-- Follows existing styling: Colored path header (Green on success, Yellow on failure, Red on error).
-- Standardizes stdout/stderr flush per repo atomically.
+- Uses colored path headers in buffered output. Interactive output labels the current repository,
+  streams its stdout/stderr lines above the progress bar, and does not interleave different repos.
 - Respects `--quiet` (skips rendering clean repos) and `--only-changes` (skips repos with empty stdout).
 - Automatic color suppression on `NO_COLOR=1` or non-TTY pipes via `anstream` / `supports-color`.
-- In interactive TTY mode, suspends the live progress line while printing repository output and
-  redraws that same line afterward. Clears it before the final summary.
+- In interactive TTY mode, uses `MultiProgress::println` to keep the status bar below streamed
+  repository output. Clears it before the final summary.
 
 ##### 2. AI / Machine-Readable JSON Formatter (`--json`):
 Outputs a top-level JSON document containing execution metadata and individual repo results:

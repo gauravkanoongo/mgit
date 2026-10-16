@@ -9,8 +9,10 @@ use tokio_util::sync::CancellationToken;
 
 use crate::args::{parse_cli, ArgsError};
 use crate::discovery::discover_repos;
-use crate::engine::run_engine;
-use crate::output::{stream_in_order, JsonFormatter, OutputFormatter, TerminalFormatter};
+use crate::engine::{run_engine, run_engine_streaming};
+use crate::output::{
+    stream_events_in_order, stream_in_order, JsonFormatter, OutputFormatter, TerminalFormatter,
+};
 
 #[tokio::main]
 async fn main() {
@@ -56,10 +58,10 @@ async fn run() -> i32 {
         return 0;
     }
 
-    // Create interactive progress spinner only when connected to an interactive TTY and not under --json / --quiet
+    // Use the coordinated live status line only for interactive human-readable output.
     use std::io::IsTerminal;
     let is_interactive = std::io::stdout().is_terminal() && !config.json && !config.quiet && !config.summary_only;
-    let pb = if is_interactive {
+    let progress = if is_interactive {
         Some(output::create_progress_bar(total))
     } else {
         None
@@ -75,22 +77,34 @@ async fn run() -> i32 {
         }
     });
 
-    let (tx, rx) = mpsc::channel(config.jobs.max(1) * 2);
     let git_args = Arc::new(git_args);
     let config = Arc::new(config);
 
-    // Spawn async worker pool
-    let worker_handle = tokio::spawn(run_engine(
-        repos,
-        git_args.clone(),
-        config.clone(),
-        cancel_token.clone(),
-        tx,
-    ));
-
-    // Stream and render results in strict sequential order
-    let stats = stream_in_order(total, rx, &config, formatter.as_ref(), pb.as_ref()).await;
-    let _ = worker_handle.await;
+    let stats = if let Some(progress) = progress.as_ref() {
+        let (tx, rx) = mpsc::unbounded_channel();
+        let worker_handle = tokio::spawn(run_engine_streaming(
+            repos,
+            git_args.clone(),
+            config.clone(),
+            cancel_token.clone(),
+            tx,
+        ));
+        let stats = stream_events_in_order(rx, &config, formatter.as_ref(), progress).await;
+        let _ = worker_handle.await;
+        stats
+    } else {
+        let (tx, rx) = mpsc::channel(config.jobs.max(1) * 2);
+        let worker_handle = tokio::spawn(run_engine(
+            repos,
+            git_args.clone(),
+            config.clone(),
+            cancel_token.clone(),
+            tx,
+        ));
+        let stats = stream_in_order(total, rx, &config, formatter.as_ref()).await;
+        let _ = worker_handle.await;
+        stats
+    };
 
     formatter.render_summary(&stats, &config);
 

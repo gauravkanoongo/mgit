@@ -1,10 +1,10 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::io::Write;
 use std::sync::{Arc, Mutex};
 use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc;
 use anstyle::{Color, Style};
-use indicatif::{ProgressBar, ProgressDrawTarget, ProgressStyle};
+use indicatif::{MultiProgress, ProgressBar, ProgressDrawTarget, ProgressStyle};
 
 use crate::args::MgitConfig;
 
@@ -28,6 +28,35 @@ pub struct RepoResult {
     pub stderr: String,
     pub has_changes: bool,
     pub elapsed_ms: u64,
+}
+
+/// Output events emitted while a repository command is running.
+#[derive(Debug)]
+pub enum RepoEvent {
+    Started { id: usize, repo: String },
+    Output { id: usize, text: String },
+    Finished(RepoResult),
+}
+
+impl RepoEvent {
+    fn id(&self) -> usize {
+        match self {
+            Self::Started { id, .. } | Self::Output { id, .. } => *id,
+            Self::Finished(result) => result.id,
+        }
+    }
+}
+
+/// One coordinated progress display and its log printer.
+pub struct InteractiveProgress {
+    multi: MultiProgress,
+    bar: ProgressBar,
+}
+
+impl InteractiveProgress {
+    fn println(&self, message: impl AsRef<str>) {
+        let _ = self.multi.println(message);
+    }
 }
 
 /// Aggregated execution statistics.
@@ -58,6 +87,23 @@ pub trait OutputFormatter: Send + Sync {
     fn render_header(&self, command: &[String], count: usize);
     fn render_repo(&self, result: &RepoResult, config: &MgitConfig);
     fn render_summary(&self, stats: &SummaryStats, config: &MgitConfig);
+    fn render_repo_above_progress(
+        &self,
+        result: &RepoResult,
+        config: &MgitConfig,
+        _progress: &InteractiveProgress,
+    ) {
+        self.render_repo(result, config);
+    }
+    fn render_stream_started(&self, _repo: &str, _progress: &InteractiveProgress) {}
+    fn render_stream_output(&self, _text: &str, _progress: &InteractiveProgress) {}
+    fn render_stream_finished(
+        &self,
+        _result: &RepoResult,
+        _config: &MgitConfig,
+        _progress: &InteractiveProgress,
+    ) {
+    }
 }
 
 /// Human-readable terminal output formatter with elegant pastel/royal ANSI colors and clear separators.
@@ -117,48 +163,50 @@ impl<W: Write + Send + Sync> OutputFormatter for TerminalFormatter<W> {
     }
 
     fn render_repo(&self, result: &RepoResult, config: &MgitConfig) {
-        if config.summary_only {
-            return;
-        }
-
-        // Apply filtering
-        if config.only_changes && !result.has_changes && result.status == RepoStatus::Success {
-            return;
-        }
-
-        if config.quiet && result.status == RepoStatus::Success && result.stdout.trim().is_empty() && result.stderr.trim().is_empty() {
-            return;
-        }
-
         let mut out = self.writer.lock().unwrap();
+        render_terminal_repo(&mut *out, result, config);
+    }
 
-        let (icon, header_style) = match result.status {
-            RepoStatus::Success => ("✔", PASTEL_GREEN),
-            RepoStatus::Failure => ("▲", PASTEL_PEACH),
-            RepoStatus::Error => ("✖", PASTEL_ROSE),
-        };
-
-        // Header line with repo path and optional timer badge
-        if config.timer {
-            let _ = writeln!(
-                out,
-                "{header_style}{icon} {}{header_style:#} {DIM_LABEL}[{}ms]{DIM_LABEL:#}",
-                result.repo,
-                result.elapsed_ms
-            );
-        } else {
-            let _ = writeln!(out, "{header_style}{icon} {}{header_style:#}", result.repo);
+    fn render_repo_above_progress(
+        &self,
+        result: &RepoResult,
+        config: &MgitConfig,
+        progress: &InteractiveProgress,
+    ) {
+        let mut output = Vec::new();
+        render_terminal_repo(&mut output, result, config);
+        let output = String::from_utf8_lossy(&output);
+        if !output.is_empty() {
+            progress.println(output.trim_end_matches('\n'));
         }
+    }
 
-        if !result.stdout.is_empty() {
-            let _ = write!(out, "{}", result.stdout);
-        }
-        if !result.stderr.is_empty() {
-            let _ = write!(out, "{}", result.stderr);
-        }
+    fn render_stream_started(&self, repo: &str, progress: &InteractiveProgress) {
+        progress.println(format!("› {repo}"));
+    }
 
-        // Clean, lightweight dark gray dimmed dashed separator line
-        let _ = writeln!(out, "{DIM_GRAY}┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈{DIM_GRAY:#}");
+    fn render_stream_output(&self, text: &str, progress: &InteractiveProgress) {
+        progress.println(text);
+    }
+
+    fn render_stream_finished(
+        &self,
+        result: &RepoResult,
+        config: &MgitConfig,
+        progress: &InteractiveProgress,
+    ) {
+        match result.status {
+            RepoStatus::Success if config.timer => {
+                progress.println(format!("  ✔ [{}ms]", result.elapsed_ms))
+            }
+            RepoStatus::Success => {}
+            RepoStatus::Failure => {
+                progress.println(format!("  ▲ command failed [{}ms]", result.elapsed_ms))
+            }
+            RepoStatus::Error => {
+                progress.println(format!("  ✖ command error [{}ms]", result.elapsed_ms))
+            }
+        }
     }
 
     fn render_summary(&self, stats: &SummaryStats, config: &MgitConfig) {
@@ -187,6 +235,50 @@ impl<W: Write + Send + Sync> OutputFormatter for TerminalFormatter<W> {
 
         let _ = writeln!(out);
     }
+}
+
+fn render_terminal_repo<W: Write>(out: &mut W, result: &RepoResult, config: &MgitConfig) {
+    if config.summary_only {
+        return;
+    }
+
+    if config.only_changes && !result.has_changes && result.status == RepoStatus::Success {
+        return;
+    }
+
+    if config.quiet
+        && result.status == RepoStatus::Success
+        && result.stdout.trim().is_empty()
+        && result.stderr.trim().is_empty()
+    {
+        return;
+    }
+
+    let (icon, header_style) = match result.status {
+        RepoStatus::Success => ("✔", PASTEL_GREEN),
+        RepoStatus::Failure => ("▲", PASTEL_PEACH),
+        RepoStatus::Error => ("✖", PASTEL_ROSE),
+    };
+
+    if config.timer {
+        let _ = writeln!(
+            out,
+            "{header_style}{icon} {}{header_style:#} {DIM_LABEL}[{}ms]{DIM_LABEL:#}",
+            result.repo,
+            result.elapsed_ms
+        );
+    } else {
+        let _ = writeln!(out, "{header_style}{icon} {}{header_style:#}", result.repo);
+    }
+
+    if !result.stdout.is_empty() {
+        let _ = write!(out, "{}", result.stdout);
+    }
+    if !result.stderr.is_empty() {
+        let _ = write!(out, "{}", result.stderr);
+    }
+
+    let _ = writeln!(out, "{DIM_GRAY}┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈{DIM_GRAY:#}");
 }
 
 /// Structured JSON output document for AI agents and automated workflows.
@@ -251,16 +343,12 @@ impl<W: Write + Send + Sync> OutputFormatter for JsonFormatter<W> {
     }
 }
 
-/// Consumes completed repository results from workers and guarantees strict in-order sequential output.
-///
-/// When `progress_bar` is provided (interactive TTY), completed repo output is printed above one
-/// live status line. The line is cleared when streaming finishes, before the final summary.
+/// Consumes completed repository results from workers and guarantees strict in-order output.
 pub async fn stream_in_order(
     total: usize,
     mut rx: mpsc::Receiver<RepoResult>,
     config: &MgitConfig,
     formatter: &dyn OutputFormatter,
-    progress_bar: Option<&ProgressBar>,
 ) -> SummaryStats {
     let mut pending = HashMap::<usize, RepoResult>::new();
     let mut next_expected_id = 0;
@@ -270,14 +358,7 @@ pub async fn stream_in_order(
         // Check if next item is already in pending buffer
         if let Some(result) = pending.remove(&next_expected_id) {
             stats.record(&result);
-            render_repo_with_progress(&result, config, formatter, progress_bar);
-            if let Some(pb) = progress_bar {
-                pb.inc(1);
-                pb.set_message(format!(
-                    "✨ [{}✔ {}▲ {}✖]",
-                    stats.success, stats.failure, stats.error
-                ));
-            }
+            formatter.render_repo(&result, config);
             next_expected_id += 1;
             continue;
         }
@@ -287,14 +368,7 @@ pub async fn stream_in_order(
             Some(result) => {
                 if result.id == next_expected_id {
                     stats.record(&result);
-                    render_repo_with_progress(&result, config, formatter, progress_bar);
-                    if let Some(pb) = progress_bar {
-                        pb.inc(1);
-                        pb.set_message(format!(
-                            "✨ [{}✔ {}▲ {}✖]",
-                            stats.success, stats.failure, stats.error
-                        ));
-                    }
+                    formatter.render_repo(&result, config);
                     next_expected_id += 1;
                 } else {
                     pending.insert(result.id, result);
@@ -304,38 +378,100 @@ pub async fn stream_in_order(
         }
     }
 
-    if let Some(pb) = progress_bar {
-        pb.finish_and_clear();
-    }
-
     stats
 }
 
-fn render_repo_with_progress(
-    result: &RepoResult,
+/// Renders interactive repository output as it arrives while preserving repository order.
+pub async fn stream_events_in_order(
+    mut rx: mpsc::UnboundedReceiver<RepoEvent>,
     config: &MgitConfig,
     formatter: &dyn OutputFormatter,
-    progress_bar: Option<&ProgressBar>,
-) {
-    if let Some(pb) = progress_bar {
-        pb.suspend(|| formatter.render_repo(result, config));
+    progress: &InteractiveProgress,
+) -> SummaryStats {
+    let mut pending = HashMap::<usize, VecDeque<RepoEvent>>::new();
+    let mut next_expected_id = 0;
+    let mut stats = SummaryStats::default();
+
+    while let Some(event) = rx.recv().await {
+        if event.id() != next_expected_id {
+            pending.entry(event.id()).or_default().push_back(event);
+            continue;
+        }
+
+        let mut current = Some(event);
+        while let Some(event) = current {
+            match event {
+                RepoEvent::Started { repo, .. } if !config.only_changes => {
+                    formatter.render_stream_started(&repo, progress);
+                    progress.bar.set_message(format!(
+                        "{} [{}✔ {}▲ {}✖]",
+                        compact_repo_label(&repo),
+                        stats.success,
+                        stats.failure,
+                        stats.error
+                    ));
+                }
+                RepoEvent::Output { text, .. } if !config.only_changes => {
+                    formatter.render_stream_output(&text, progress);
+                }
+                RepoEvent::Finished(result) => {
+                    stats.record(&result);
+                    if config.only_changes {
+                        formatter.render_repo_above_progress(&result, config, progress);
+                    } else {
+                        formatter.render_stream_finished(&result, config, progress);
+                    }
+
+                    progress.bar.inc(1);
+                    progress.bar.set_message(format!(
+                        "✨ [{}✔ {}▲ {}✖]",
+                        stats.success, stats.failure, stats.error
+                    ));
+                    next_expected_id += 1;
+                }
+                RepoEvent::Started { .. } | RepoEvent::Output { .. } => {}
+            }
+
+            current = pending
+                .get_mut(&next_expected_id)
+                .and_then(|events| events.pop_front());
+            if pending
+                .get(&next_expected_id)
+                .is_some_and(|events| events.is_empty())
+            {
+                pending.remove(&next_expected_id);
+            }
+        }
+    }
+
+    progress.bar.finish_and_clear();
+    stats
+}
+
+fn compact_repo_label(repo: &str) -> String {
+    let mut chars = repo.chars();
+    let label = chars.by_ref().take(14).collect::<String>();
+    if chars.next().is_some() {
+        format!("{label}…")
     } else {
-        formatter.render_repo(result, config);
+        label
     }
 }
 
-/// Creates a colorful interactive dotted spinner and progress line for TTY sessions.
-pub fn create_progress_bar(total: usize) -> ProgressBar {
-    let pb = ProgressBar::new(total as u64);
-    pb.set_draw_target(ProgressDrawTarget::stdout());
+/// Creates a coordinated status bar that keeps log output above the live progress line.
+pub fn create_progress_bar(total: usize) -> InteractiveProgress {
+    let multi = MultiProgress::new();
+    multi.set_draw_target(ProgressDrawTarget::stdout());
+    multi.set_move_cursor(true);
+    let pb = multi.add(ProgressBar::new(total as u64));
     pb.set_style(
         ProgressStyle::default_bar()
-            .template("{spinner:.cyan} [{pos}/{len}] {bar:25.blue/dim} {msg} ({elapsed})")
+            .template("{spinner:.cyan} [{pos}/{len}] {bar:20.blue/dim} {msg} ({elapsed})")
             .unwrap()
             .tick_chars("⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"),
     );
     pb.enable_steady_tick(std::time::Duration::from_millis(80));
-    pb
+    InteractiveProgress { multi, bar: pb }
 }
 
 #[cfg(test)]
@@ -384,13 +520,77 @@ mod tests {
         let recorded = Arc::new(Mutex::new(Vec::new()));
         let formatter = BufferFormatter(recorded.clone());
 
-        let progress_bar = ProgressBar::hidden();
-        let stats = stream_in_order(3, rx, &config, &formatter, Some(&progress_bar)).await;
+        let stats = stream_in_order(3, rx, &config, &formatter).await;
         assert_eq!(stats.total, 3);
         assert_eq!(stats.success, 3);
 
         let final_order = recorded.lock().unwrap().clone();
         assert_eq!(final_order, vec!["repo_a", "repo_b", "repo_c"]);
+    }
+
+    #[tokio::test]
+    async fn test_interactive_events_stream_in_repository_order() {
+        let (tx, rx) = mpsc::unbounded_channel();
+        let first = dummy_result(0, "repo_a", RepoStatus::Success, "first line");
+        let second = dummy_result(1, "repo_b", RepoStatus::Success, "second line");
+        tx.send(RepoEvent::Started {
+            id: 1,
+            repo: second.repo.clone(),
+        })
+        .unwrap();
+        tx.send(RepoEvent::Output {
+            id: 1,
+            text: "second line".to_string(),
+        })
+        .unwrap();
+        tx.send(RepoEvent::Finished(second)).unwrap();
+        tx.send(RepoEvent::Started {
+            id: 0,
+            repo: first.repo.clone(),
+        })
+        .unwrap();
+        tx.send(RepoEvent::Output {
+            id: 0,
+            text: "first line".to_string(),
+        })
+        .unwrap();
+        tx.send(RepoEvent::Finished(first)).unwrap();
+        drop(tx);
+
+        struct EventFormatter(Arc<Mutex<Vec<String>>>);
+        impl OutputFormatter for EventFormatter {
+            fn render_banner(&self, _: &MgitConfig) {}
+            fn render_header(&self, _: &[String], _: usize) {}
+            fn render_repo(&self, _: &RepoResult, _: &MgitConfig) {}
+            fn render_summary(&self, _: &SummaryStats, _: &MgitConfig) {}
+            fn render_stream_started(&self, repo: &str, _: &InteractiveProgress) {
+                self.0.lock().unwrap().push(format!("start:{repo}"));
+            }
+            fn render_stream_output(&self, text: &str, _: &InteractiveProgress) {
+                self.0.lock().unwrap().push(format!("output:{text}"));
+            }
+        }
+
+        let recorded = Arc::new(Mutex::new(Vec::new()));
+        let formatter = EventFormatter(recorded.clone());
+        let multi = MultiProgress::with_draw_target(ProgressDrawTarget::hidden());
+        let progress = InteractiveProgress {
+            bar: multi.add(ProgressBar::new(2)),
+            multi,
+        };
+
+        let stats =
+            stream_events_in_order(rx, &MgitConfig::default(), &formatter, &progress).await;
+        assert_eq!(stats.total, 2);
+        assert_eq!(
+            *recorded.lock().unwrap(),
+            vec![
+                "start:repo_a",
+                "output:first line",
+                "start:repo_b",
+                "output:second line",
+            ]
+        );
     }
 
     #[test]
