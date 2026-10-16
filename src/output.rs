@@ -33,14 +33,42 @@ pub struct RepoResult {
 #[derive(Debug)]
 pub enum RepoEvent {
     Started { id: usize, repo: String },
-    Output { id: usize, text: String },
+    Output {
+        id: usize,
+        stream: OutputStream,
+        text: String,
+    },
+    CapturedChunk {
+        id: usize,
+        stream: OutputStream,
+        bytes: Vec<u8>,
+    },
+    StreamFinished { id: usize, stream: OutputStream },
     Finished(RepoResult),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum OutputStream {
+    Stdout,
+    Stderr,
+}
+
+impl OutputStream {
+    pub fn index(self) -> usize {
+        match self {
+            Self::Stdout => 0,
+            Self::Stderr => 1,
+        }
+    }
 }
 
 impl RepoEvent {
     fn id(&self) -> usize {
         match self {
-            Self::Started { id, .. } | Self::Output { id, .. } => *id,
+            Self::Started { id, .. }
+            | Self::Output { id, .. }
+            | Self::CapturedChunk { id, .. }
+            | Self::StreamFinished { id, .. } => *id,
             Self::Finished(result) => result.id,
         }
     }
@@ -369,6 +397,7 @@ pub async fn stream_events_in_order(
                 RepoEvent::Output { text, .. } if !config.only_changes => {
                     formatter.render_stream_output(&text);
                 }
+                RepoEvent::CapturedChunk { .. } | RepoEvent::StreamFinished { .. } => {}
                 RepoEvent::Finished(result) => {
                     stats.record(&result);
                     if config.only_changes {
@@ -463,6 +492,7 @@ mod tests {
         .unwrap();
         tx.send(RepoEvent::Output {
             id: 1,
+            stream: OutputStream::Stdout,
             text: "second line".to_string(),
         })
         .unwrap();
@@ -474,6 +504,7 @@ mod tests {
         .unwrap();
         tx.send(RepoEvent::Output {
             id: 0,
+            stream: OutputStream::Stdout,
             text: "first line".to_string(),
         })
         .unwrap();

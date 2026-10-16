@@ -52,6 +52,8 @@ pub struct MgitConfig {
     pub timer: bool,
     /// Suppress ASCII banner.
     pub no_banner: bool,
+    /// Display the optional inline terminal UI.
+    pub tui: bool,
 }
 
 impl Default for MgitConfig {
@@ -72,6 +74,7 @@ impl Default for MgitConfig {
             max_depth: None,
             timer: false,
             no_banner: false,
+            tui: false,
         }
     }
 }
@@ -97,6 +100,7 @@ pub fn help_text() -> &'static str {
         "    --fail-fast           Cancel remaining running jobs on first failure\n",
         "    --timer               Display execution duration timings\n",
         "    --no-banner           Suppress ASCII banner\n",
+        "    --tui                 Show inline progress and scrollable command output\n",
         "    -d, --max-depth <N>   Limit directory traversal depth\n",
         "    -h, --help            Show this help information\n\n",
         "EXAMPLES:\n",
@@ -139,6 +143,13 @@ pub fn parse_cli(argv: impl IntoIterator<Item = String>) -> Result<(Vec<String>,
 
     if git_args.is_empty() {
         return Err(ArgsError::NoArguments);
+    }
+
+    if config.tui && (config.json || config.summary_only || config.quiet || config.only_changes) {
+        return Err(ArgsError::Custom(
+            "--tui cannot be combined with --json, --summary-only, --quiet, or --only-changes"
+                .to_string(),
+        ));
     }
 
     Ok((git_args, config))
@@ -200,6 +211,9 @@ fn parse_mgit_options(raw_args: &[String], config: &mut MgitConfig) -> Result<()
             }
             Long("no-banner") => {
                 config.no_banner = true;
+            }
+            Long("tui") => {
+                config.tui = true;
             }
             Short('d') | Long("max-depth") => {
                 let val = parser
@@ -338,6 +352,18 @@ mod tests {
     }
 
     #[test]
+    fn test_inline_tui_option_and_conflicts() {
+        let argv = to_argv(&["status", "--", "--tui"]);
+        let (_, config) = parse_cli(argv).unwrap();
+        assert!(config.tui);
+
+        for incompatible in ["--json", "--summary-only", "--quiet", "--only-changes"] {
+            let argv = to_argv(&["status", "--", "--tui", incompatible]);
+            assert!(matches!(parse_cli(argv), Err(ArgsError::Custom(_))));
+        }
+    }
+
+    #[test]
     fn test_help_flag_triggers_help_signal() {
         let argv1 = to_argv(&["--help"]);
         assert_eq!(parse_cli(argv1), Err(ArgsError::HelpRequested));
@@ -377,4 +403,3 @@ mod tests {
         assert!(format!("{}", ArgsError::HelpRequested).contains("USAGE:"));
     }
 }
-

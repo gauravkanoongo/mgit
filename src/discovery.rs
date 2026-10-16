@@ -62,12 +62,27 @@ fn is_git_repo(dir: &Path) -> bool {
 /// Scans the filesystem according to `MgitConfig` and returns a deterministically sorted
 /// list of discovered repositories with assigned sequential IDs.
 pub fn discover_repos(config: &MgitConfig) -> Result<Vec<RepoEntry>, std::io::Error> {
+    discover_repos_with_progress(config, |_| true)
+}
+
+/// Scans the filesystem and reports the repository count after each visited entry.
+/// Returning `false` from the callback interrupts the scan.
+pub fn discover_repos_with_progress(
+    config: &MgitConfig,
+    mut on_progress: impl FnMut(usize) -> bool,
+) -> Result<Vec<RepoEntry>, std::io::Error> {
     let root = &config.dir;
     let mut discovered_paths = Vec::new();
 
     // Check if the root directory itself is a git repository
     if is_git_repo(root) {
         discovered_paths.push(root.clone());
+    }
+    if !on_progress(discovered_paths.len()) {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::Interrupted,
+            "repository discovery cancelled",
+        ));
     }
 
     let mut walker = WalkDir::new(root).min_depth(1).follow_links(false);
@@ -78,6 +93,12 @@ pub fn discover_repos(config: &MgitConfig) -> Result<Vec<RepoEntry>, std::io::Er
 
     let mut it = walker.into_iter();
     while let Some(entry_res) = it.next() {
+        if !on_progress(discovered_paths.len()) {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::Interrupted,
+                "repository discovery cancelled",
+            ));
+        }
         let entry = match entry_res {
             Ok(e) => e,
             Err(_) => continue, // Ignore unreadable directories / permission errors
@@ -87,6 +108,12 @@ pub fn discover_repos(config: &MgitConfig) -> Result<Vec<RepoEntry>, std::io::Er
             // If this is a git repo, record it and prune descending into it
             if is_git_repo(entry.path()) {
                 discovered_paths.push(entry.path().to_path_buf());
+                if !on_progress(discovered_paths.len()) {
+                    return Err(std::io::Error::new(
+                        std::io::ErrorKind::Interrupted,
+                        "repository discovery cancelled",
+                    ));
+                }
                 it.skip_current_dir();
                 continue;
             }
@@ -128,6 +155,40 @@ mod tests {
 
         let repos = discover_repos(&config).unwrap();
         assert!(repos.is_empty());
+    }
+
+    #[test]
+    fn test_discovery_progress_reports_found_repositories() {
+        let temp = tempdir().unwrap();
+        fs::create_dir_all(temp.path().join("repo_a").join(".git")).unwrap();
+        fs::create_dir_all(temp.path().join("repo_b").join(".git")).unwrap();
+        let config = MgitConfig {
+            dir: temp.path().to_path_buf(),
+            ..MgitConfig::default()
+        };
+        let mut progress = Vec::new();
+
+        let repos = discover_repos_with_progress(&config, |count| {
+            progress.push(count);
+            true
+        })
+        .unwrap();
+
+        assert_eq!(repos.len(), 2);
+        assert_eq!(progress.last(), Some(&2));
+        assert!(progress.iter().all(|count| *count <= 2));
+    }
+
+    #[test]
+    fn test_discovery_progress_callback_can_cancel_scan() {
+        let temp = tempdir().unwrap();
+        let config = MgitConfig {
+            dir: temp.path().to_path_buf(),
+            ..MgitConfig::default()
+        };
+
+        let error = discover_repos_with_progress(&config, |_| false).unwrap_err();
+        assert_eq!(error.kind(), std::io::ErrorKind::Interrupted);
     }
 
     #[test]
@@ -281,4 +342,3 @@ mod tests {
         assert_eq!(repos[0].path, shallow);
     }
 }
-

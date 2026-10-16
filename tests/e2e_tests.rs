@@ -186,3 +186,17 @@ fn test_e2e_no_color_environment() {
     assert!(!stdout.contains("\x1b["));
 }
 
+#[test]
+fn test_e2e_tui_requires_interactive_terminals() {
+    let bin = get_bin_path();
+    let output = Command::new(&bin)
+        .arg("status")
+        .arg("--")
+        .arg("--tui")
+        .output()
+        .unwrap();
+
+    assert_eq!(output.status.code(), Some(2));
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("--tui requires interactive stdout and stderr terminals"));
+}

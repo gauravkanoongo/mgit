@@ -3,8 +3,8 @@
 ## Purpose
 
 Record the alternatives considered for showing status and progress alongside live output from
-multiple repositories, and the direction selected for a future implementation. This document
-describes a planned feature; the feature is **not implemented yet**.
+multiple repositories, and the direction selected for implementation. The inline UI is available
+through `--tui`.
 
 ## User goal
 
@@ -70,11 +70,9 @@ should use a simple layout rather than fzf or a terminal multiplexer:
 +--------------------------------------------------+
 ```
 
-The UI is opt-in (a flag such as `--tui` is a candidate; the final spelling is not decided). If
-the flag is absent, preserve the current CLI behavior. Do not silently switch to a TUI just
-because stdout is a terminal. If UI prerequisites or terminal capability checks fail, retain
-normal output or report a clear usage/runtime error according to the final flag contract; define
-that contract before implementation.
+The implemented option is `--tui`, parsed after mgit's final `--`. It does not activate
+automatically. It requires interactive stdout and stderr and reports an error otherwise. It cannot
+be combined with `--json`, `--summary-only`, `--quiet`, or `--only-changes`.
 
 ## Progress model
 
@@ -91,11 +89,9 @@ redrawing once per byte or line.
 
 ## Output and memory model
 
-- Capture child stdout and stderr in memory while the UI is active; no temporary output files,
-  sockets, per-repository services, or external preview process are needed.
-- Keep a single output record stream containing repository ID, stream identity (stdout/stderr),
-  and output chunks or lines. The live pane and exit replay should read the same data rather than
-  duplicating a global log and per-repository copies.
+- Capture child stdout and stderr bytes once in memory, partitioned by repository and stream.
+  Line-offset metadata renders visible output without a second persistent copy. No temporary
+  output files, sockets, per-repository services, or external preview process are needed.
 - Preserve mgit's deterministic repository ordering in the displayed output. Later repository
   output may need to wait in memory until earlier repository output is displayable, matching the
   current ordered-streaming contract.
@@ -141,14 +137,20 @@ Other risks are backpressure if the renderer cannot consume events, memory growt
 output, terminal resize/cleanup behavior, and tests that need a pseudo-terminal to exercise the
 interactive path.
 
-## Decisions still needed before implementation
+## Decisions and validation status
 
-- Final flag spelling and exact fallback/error behavior when requested UI cannot start.
-- Whether user-controlled pause/scroll should pause auto-follow and how it resumes.
-- Whether output in the combined pane needs explicit stdout/stderr labels or visual styling.
-- Whether the final summary is included in the replayed output or printed afterward.
-- Terminal matrix for manual smoke tests, especially Windows Terminal/ConPTY, Unix terminals,
-  SSH, and IDE terminals.
+The initial product decisions are implemented:
+
+- `--tui` is the explicit opt-in; it reports an error if stdout or stderr is not interactive.
+- `--json`, `--summary-only`, `--quiet`, and `--only-changes` are rejected with `--tui`.
+- Up/Down and PageUp/PageDown scroll; Home/End move to oldest/latest output. New output is
+  followed until manual scrolling pauses it; returning to the bottom resumes following.
+- The output pane labels stdout as `out` and stderr as `err`.
+- After terminal restoration, captured stdout/stderr bytes are replayed before the final summary.
+
+Automated tests cover option conflicts, in-memory output and line indexing, and non-interactive
+rejection. Manual pseudo-terminal validation remains needed across Windows Terminal/ConPTY, Unix
+terminals, SSH, and IDE terminals.
 
 ## References
 

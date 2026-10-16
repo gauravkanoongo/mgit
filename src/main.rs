@@ -2,6 +2,7 @@ pub mod args;
 pub mod discovery;
 pub mod engine;
 pub mod output;
+pub mod ui;
 
 use std::sync::Arc;
 use tokio::sync::mpsc;
@@ -32,6 +33,73 @@ async fn run() -> i32 {
             return 2;
         }
     };
+
+    if config.tui {
+        use std::io::IsTerminal;
+        if !std::io::stdout().is_terminal() || !std::io::stderr().is_terminal() {
+            eprintln!("mgit: --tui requires interactive stdout and stderr terminals");
+            return 2;
+        }
+
+        let cancel_token = CancellationToken::new();
+        let cancel_token_ctrlc = cancel_token.clone();
+        tokio::spawn(async move {
+            if tokio::signal::ctrl_c().await.is_ok() {
+                cancel_token_ctrlc.cancel();
+            }
+        });
+
+        let config = Arc::new(config);
+        let outcome = match ui::run_ui(
+            Arc::new(git_args.clone()),
+            config.clone(),
+            cancel_token,
+        )
+        .await
+        {
+            Ok(outcome) => outcome,
+            Err(err) => {
+                eprintln!("mgit: inline UI failed: {err}");
+                return 1;
+            }
+        };
+
+        let formatter = TerminalFormatter::new(anstream::stdout());
+        formatter.render_banner(&config);
+        formatter.render_header(&git_args, outcome.total);
+        for captured in &outcome.results {
+            formatter.render_stream_started(&captured.result.repo);
+            use std::io::Write;
+            if let Err(err) = std::io::stdout().write_all(&captured.stdout) {
+                eprintln!("mgit: failed to replay stdout: {err}");
+                return 1;
+            }
+            if !captured.stdout.is_empty() && !captured.stdout.ends_with(b"\n") {
+                if let Err(err) = std::io::stdout().write_all(b"\n") {
+                    eprintln!("mgit: failed to separate stdout output: {err}");
+                    return 1;
+                }
+            }
+            if let Err(err) = std::io::stderr().write_all(&captured.stderr) {
+                eprintln!("mgit: failed to replay stderr: {err}");
+                return 1;
+            }
+            if !captured.stderr.is_empty() && !captured.stderr.ends_with(b"\n") {
+                if let Err(err) = std::io::stderr().write_all(b"\n") {
+                    eprintln!("mgit: failed to separate stderr output: {err}");
+                    return 1;
+                }
+            }
+            formatter.render_stream_finished(&captured.result, &config);
+        }
+        formatter.render_summary(&outcome.stats, &config);
+
+        return if outcome.cancelled || outcome.stats.failure > 0 || outcome.stats.error > 0 {
+            1
+        } else {
+            0
+        };
+    }
 
     let repos = match discover_repos(&config) {
         Ok(r) => r,
@@ -83,6 +151,7 @@ async fn run() -> i32 {
             config.clone(),
             cancel_token.clone(),
             tx,
+            false,
         ));
         let stats = stream_events_in_order(rx, &config, formatter.as_ref()).await;
         let _ = worker_handle.await;

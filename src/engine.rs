@@ -8,12 +8,34 @@ use tokio_util::sync::CancellationToken;
 
 use crate::args::MgitConfig;
 use crate::discovery::RepoEntry;
-use crate::output::{RepoEvent, RepoResult, RepoStatus};
+use crate::output::{OutputStream, RepoEvent, RepoResult, RepoStatus};
+
+fn emit_stream_error(
+    id: usize,
+    text: String,
+    capture_chunks: bool,
+    tx: &mpsc::UnboundedSender<RepoEvent>,
+) {
+    if capture_chunks {
+        let _ = tx.send(RepoEvent::CapturedChunk {
+            id,
+            stream: OutputStream::Stderr,
+            bytes: text.as_bytes().to_vec(),
+        });
+    }
+    let _ = tx.send(RepoEvent::Output {
+        id,
+        stream: OutputStream::Stderr,
+        text,
+    });
+}
 
 async fn read_and_stream<R>(
     reader: R,
     id: usize,
+    stream: OutputStream,
     retain_output: bool,
+    capture_chunks: bool,
     tx: mpsc::UnboundedSender<RepoEvent>,
 ) -> Vec<u8>
 where
@@ -32,21 +54,30 @@ where
                 if retain_output {
                     output.extend_from_slice(&chunk[..count]);
                 }
-                for byte in &chunk[..count] {
-                    if previous_was_cr {
-                        previous_was_cr = false;
-                        if *byte == b'\n' {
-                            continue;
+                if capture_chunks {
+                    let _ = tx.send(RepoEvent::CapturedChunk {
+                        id,
+                        stream,
+                        bytes: chunk[..count].to_vec(),
+                    });
+                }
+                if !capture_chunks {
+                    for byte in &chunk[..count] {
+                        if previous_was_cr {
+                            previous_was_cr = false;
+                            if *byte == b'\n' {
+                                continue;
+                            }
                         }
-                    }
 
-                    if *byte == b'\r' || *byte == b'\n' {
-                        let text = String::from_utf8_lossy(&line).into_owned();
-                        let _ = tx.send(RepoEvent::Output { id, text });
-                        line.clear();
-                        previous_was_cr = *byte == b'\r';
-                    } else {
-                        line.push(*byte);
+                        if *byte == b'\r' || *byte == b'\n' {
+                            let text = String::from_utf8_lossy(&line).into_owned();
+                            let _ = tx.send(RepoEvent::Output { id, stream, text });
+                            line.clear();
+                            previous_was_cr = *byte == b'\r';
+                        } else {
+                            line.push(*byte);
+                        }
                     }
                 }
             }
@@ -54,9 +85,12 @@ where
         }
     }
 
-    if !line.is_empty() {
+    if !capture_chunks && !line.is_empty() {
         let text = String::from_utf8_lossy(&line).into_owned();
-        let _ = tx.send(RepoEvent::Output { id, text });
+        let _ = tx.send(RepoEvent::Output { id, stream, text });
+    }
+    if capture_chunks {
+        let _ = tx.send(RepoEvent::StreamFinished { id, stream });
     }
 
     output
@@ -68,6 +102,7 @@ pub async fn execute_repo_streaming(
     git_args: &[String],
     cancel_token: CancellationToken,
     retain_output: bool,
+    capture_chunks: bool,
     tx: mpsc::UnboundedSender<RepoEvent>,
 ) -> RepoResult {
     let start_time = Instant::now();
@@ -91,10 +126,7 @@ pub async fn execute_repo_streaming(
 
     if cancel_token.is_cancelled() {
         let result = make_error("Cancelled due to fail-fast or abort signal".to_string());
-        let _ = tx.send(RepoEvent::Output {
-            id,
-            text: result.stderr.clone(),
-        });
+        emit_stream_error(id, result.stderr.clone(), capture_chunks, &tx);
         let _ = tx.send(RepoEvent::Finished(result.clone()));
         return result;
     }
@@ -111,10 +143,7 @@ pub async fn execute_repo_streaming(
         Ok(child) => child,
         Err(err) => {
             let result = make_error(err.to_string());
-            let _ = tx.send(RepoEvent::Output {
-                id,
-                text: result.stderr.clone(),
-            });
+            emit_stream_error(id, result.stderr.clone(), capture_chunks, &tx);
             let _ = tx.send(RepoEvent::Finished(result.clone()));
             return result;
         }
@@ -125,10 +154,10 @@ pub async fn execute_repo_streaming(
     let stdout_tx = tx.clone();
     let stderr_tx = tx.clone();
     let stdout_task = tokio::spawn(async move {
-        read_and_stream(stdout, id, retain_output, stdout_tx).await
+        read_and_stream(stdout, id, OutputStream::Stdout, retain_output, capture_chunks, stdout_tx).await
     });
     let stderr_task = tokio::spawn(async move {
-        read_and_stream(stderr, id, retain_output, stderr_tx).await
+        read_and_stream(stderr, id, OutputStream::Stderr, retain_output, capture_chunks, stderr_tx).await
     });
 
     let exit_status = tokio::select! {
@@ -137,10 +166,7 @@ pub async fn execute_repo_streaming(
             stdout_task.abort();
             stderr_task.abort();
             let result = make_error("Killed due to fail-fast or abort signal".to_string());
-            let _ = tx.send(RepoEvent::Output {
-                id,
-                text: result.stderr.clone(),
-            });
+            emit_stream_error(id, result.stderr.clone(), capture_chunks, &tx);
             let _ = tx.send(RepoEvent::Finished(result.clone()));
             return result;
         }
@@ -175,10 +201,7 @@ pub async fn execute_repo_streaming(
         }
         Err(err) => {
             let error_text = err.to_string();
-            let _ = tx.send(RepoEvent::Output {
-                id,
-                text: error_text.clone(),
-            });
+            emit_stream_error(id, error_text.clone(), capture_chunks, &tx);
             RepoResult {
                 id,
                 repo: repo_display,
@@ -373,6 +396,7 @@ pub async fn run_engine_streaming(
     config: Arc<MgitConfig>,
     cancel_token: CancellationToken,
     tx: mpsc::UnboundedSender<RepoEvent>,
+    capture_chunks: bool,
 ) {
     let semaphore = Arc::new(Semaphore::new(config.jobs));
 
@@ -402,6 +426,7 @@ pub async fn run_engine_streaming(
                     &git_args,
                     cancel_token.clone(),
                     config.only_changes,
+                    capture_chunks,
                     tx.clone(),
                 )
                 .await;
@@ -441,7 +466,7 @@ mod tests {
             writer.write_all(b"one\rtwo\r\nthree").await.unwrap();
         });
 
-        let output = read_and_stream(reader, 7, true, tx).await;
+        let output = read_and_stream(reader, 7, OutputStream::Stdout, true, false, tx).await;
         writer_task.await.unwrap();
 
         let mut lines = Vec::new();

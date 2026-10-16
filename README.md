@@ -15,7 +15,7 @@ Fast, asynchronous multi-repository Git CLI utility with guaranteed deterministi
 - **Fully Asynchronous (`tokio`)**: Runs parallel Git operations across dozens/hundreds of repositories without spawning unbounded OS thread stacks.
 - **Strict In-Order Sequential Output**: Concurrently executes tasks, but buffers and streams stdout/stderr in deterministic alphabetical repository order.
 - **Interactive Streaming Output**: In terminals, repository output streams line by line in deterministic repository order. No progress bar or cursor control is used; non-interactive and JSON output retain their buffered behavior.
-- **Optional Inline UI (planned)**: A future opt-in inline view for live status/progress and scrollable command output is under design; it is not implemented yet. See [UI deliberations](./ui-deliberations.md).
+- **Optional Inline UI (`--tui`)**: Shows discovery progress and a scrollable live output pane in an inline terminal viewport; captured output is replayed after the UI exits. Requires interactive stdout and stderr. See [UI deliberations](./ui-deliberations.md).
 - **Unambiguous Argument Model**: All arguments before the **last `--`** go to `git`; options after the **last `--`** configure `mgit`.
 - **Fast Directory Pruning**: Avoids traversing into `.git/`, `node_modules/`, `target/`, `.cargo/`, `vendor/`, `build/`, and virtual environments.
 - **Worktree & Submodule Support**: Automatically identifies both `.git` directories and `.git` pointer files (`gitdir: ...`).
@@ -55,7 +55,14 @@ mgit status -s -- --json
 
 # Abort remaining tasks on first failure
 mgit pull -- --fail-fast
+
+# Show the optional inline progress/output UI
+mgit status -- --tui
 ```
+
+`--tui` requires interactive stdout and stderr and cannot be combined with `--json`,
+`--summary-only`, `--quiet`, or `--only-changes`. Use Up/Down or PageUp/PageDown to scroll,
+Home/End to jump, and `q` or Ctrl+C to cancel. Captured output is replayed after the UI exits.
 
 ### Available `mgit` Options
 
@@ -68,6 +75,7 @@ mgit pull -- --fail-fast
 | | `--json` | Output structured JSON report for automation and AI agents |
 | | `--summary-only` | Print only the final tally summary |
 | | `--fail-fast` | Cancel remaining async operations on first error |
+| | `--tui` | Show inline progress and scrollable output (interactive terminals only) |
 | `-d` | `--max-depth <N>` | Limit directory traversal depth |
 | `-h` | `--help` | Display usage and help |
 

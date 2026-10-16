@@ -64,19 +64,17 @@ Output consumer awaits items in strict index sequence: 0, 1, 2, ...
 2. **Instant Printing:** If Repo 0 finishes quickly, output begins streaming to the terminal immediately without waiting for the entire batch.
 3. **No Terminal Scrambling:** Repositories never interleave their stdout/stderr.
 
-Current behavior: for interactive terminals, stream output lines directly while buffering events
-from later repositories until earlier repository output is complete. This preserves deterministic
-ordering without waiting for each whole command to finish. There is currently no progress bar or
-cursor-controlled interface. Filtered output remains buffered until its visibility is known.
-Piped and JSON output use the existing non-interactive path.
+Current default behavior: for interactive terminals, stream output lines directly while buffering
+events from later repositories until earlier repository output is complete. This preserves
+deterministic ordering without waiting for each whole command to finish. No progress bar or
+cursor-controlled interface is used by default. Filtered output remains buffered until its
+visibility is known. Piped and JSON output use the existing non-interactive path.
 
-Planned direction: an explicitly enabled inline TUI may reserve a bounded terminal region with a
-status/progress row and scrollable combined stdout/stderr output below it. Use in-memory captured
-output only, render at a bounded rate, preserve repository order, restore terminal state on every
-exit path, and replay captured output as ordinary console output after the UI exits so it enters
-native terminal scrollback. Keep the current output path unchanged when the UI is not requested.
-See [ui-deliberations.md](./ui-deliberations.md) for alternatives, tradeoffs, and open decisions;
-see the UI section of [low_level_design.md](./low_level_design.md) for architectural constraints.
+Implemented opt-in direction: `--tui` shows discovery progress and an inline scrollable output
+viewport. It captures output in memory, restores the terminal, and replays captured stdout/stderr
+afterward. The default, JSON, and redirected output paths remain unchanged. See
+[ui-deliberations.md](./ui-deliberations.md) for the design record and
+[low_level_design.md](./low_level_design.md) for the implementation architecture.
 
 ---
 

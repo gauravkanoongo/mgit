@@ -104,12 +104,14 @@
 
 ---
 
-## Planned: Optional Inline Output UI
+## Optional Inline Output UI
 
 Design and constraints are documented in [`ui-deliberations.md`](./ui-deliberations.md) and the UI section of [`low_level_design.md`](./low_level_design.md).
 
-- [ ] Resolve the open product decisions in `ui-deliberations.md` (flag and fallback behavior, scroll-follow interaction, stream presentation, summary placement, and terminal test matrix).
-- [ ] Implement opt-in inline status/progress and scrollable stdout/stderr rendering without changing default, JSON, or non-TTY behavior.
-- [ ] Capture output once in memory for live rendering and complete replay on exit; preserve repository order and keep rendering from blocking output readers or job concurrency.
-- [ ] Restore terminal state on normal completion, errors, Ctrl+C, and fail-fast cancellation.
-- [ ] Add focused unit/integration tests and pseudo-terminal coverage where supported; run the existing test suite.
+- [x] Settle the UI contract: `--tui`, terminal/error behavior, compatible options, scrolling, stream labels, and summary placement.
+- [x] Implement inline discovery status/progress and scrollable stdout/stderr rendering without changing the default, JSON, or redirected paths.
+- [x] Capture output once in memory for the live view and complete replay; preserve repository ordering and avoid blocking output readers or reducing job concurrency.
+- [x] Restore terminal state and replay captured bytes on completion, errors, Ctrl+C, and fail-fast cancellation.
+- [x] Add focused unit and end-to-end tests, including non-interactive rejection.
+- [x] Run `cargo test` (35 unit tests and 7 end-to-end tests passed).
+- [ ] Perform interactive pseudo-terminal smoke tests on supported terminals.
