@@ -4,7 +4,6 @@ use std::sync::{Arc, Mutex};
 use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc;
 use anstyle::{Color, Style};
-use indicatif::{ProgressBar, ProgressStyle};
 
 use crate::args::MgitConfig;
 
@@ -252,15 +251,11 @@ impl<W: Write + Send + Sync> OutputFormatter for JsonFormatter<W> {
 }
 
 /// Consumes completed repository results from workers and guarantees strict in-order sequential output.
-///
-/// When `progress_bar` is provided (interactive TTY), completed repos are printed above the spinner
-/// and the colorful status line dynamically tracks progress without interfering with stdout.
 pub async fn stream_in_order(
     total: usize,
     mut rx: mpsc::Receiver<RepoResult>,
     config: &MgitConfig,
     formatter: &dyn OutputFormatter,
-    progress_bar: Option<&ProgressBar>,
 ) -> SummaryStats {
     let mut pending = HashMap::<usize, RepoResult>::new();
     let mut next_expected_id = 0;
@@ -271,13 +266,6 @@ pub async fn stream_in_order(
         if let Some(result) = pending.remove(&next_expected_id) {
             stats.record(&result);
             formatter.render_repo(&result, config);
-            if let Some(pb) = progress_bar {
-                pb.inc(1);
-                pb.set_message(format!(
-                    "✨ [{}✔ {}▲ {}✖]",
-                    stats.success, stats.failure, stats.error
-                ));
-            }
             next_expected_id += 1;
             continue;
         }
@@ -288,13 +276,6 @@ pub async fn stream_in_order(
                 if result.id == next_expected_id {
                     stats.record(&result);
                     formatter.render_repo(&result, config);
-                    if let Some(pb) = progress_bar {
-                        pb.inc(1);
-                        pb.set_message(format!(
-                            "✨ [{}✔ {}▲ {}✖]",
-                            stats.success, stats.failure, stats.error
-                        ));
-                    }
                     next_expected_id += 1;
                 } else {
                     pending.insert(result.id, result);
@@ -304,24 +285,7 @@ pub async fn stream_in_order(
         }
     }
 
-    if let Some(pb) = progress_bar {
-        pb.finish_and_clear();
-    }
-
     stats
-}
-
-/// Creates a colorful interactive dotted spinner and progress line for TTY sessions.
-pub fn create_progress_bar(total: usize) -> ProgressBar {
-    let pb = ProgressBar::new(total as u64);
-    pb.set_style(
-        ProgressStyle::default_bar()
-            .template("{spinner:.cyan} [{pos}/{len}] {bar:25.blue/dim} {msg} ({elapsed})")
-            .unwrap()
-            .tick_chars("⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"),
-    );
-    pb.enable_steady_tick(std::time::Duration::from_millis(80));
-    pb
 }
 
 #[cfg(test)]
@@ -370,7 +334,7 @@ mod tests {
         let recorded = Arc::new(Mutex::new(Vec::new()));
         let formatter = BufferFormatter(recorded.clone());
 
-        let stats = stream_in_order(3, rx, &config, &formatter, None).await;
+        let stats = stream_in_order(3, rx, &config, &formatter).await;
         assert_eq!(stats.total, 3);
         assert_eq!(stats.success, 3);
 
@@ -440,6 +404,7 @@ mod tests {
         assert!(out.contains("failed_repo"));
         assert!(out.contains("error_repo"));
         assert!(out.contains("command failed"));
+        assert!(out.contains("┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈"));
 
         let stats = SummaryStats {
             total: 2,

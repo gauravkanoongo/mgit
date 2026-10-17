@@ -102,3 +102,25 @@
   - [x] `test_e2e_no_color_environment`
 - [x] Verify 100% test pass rate with `cargo test`
 
+---
+
+## Dated Follow-up: 2026-10-17
+
+> This section is append-only. The historical branch label and task records above are preserved;
+> the active work for this follow-up is on `develop`.
+
+- [x] Compare `v0.1.0`, `v0.2.0`, `feature/enhancements-2026`, and `feature/tui`; record what is
+  retained or rejected in [`branch-retirement.md`](./branch-retirement.md).
+- [x] Close `feature/tui` with commit `b9b5778` and annotated tag
+  `archive/feature/tui`.
+- [x] Close `feature/enhancements-2026` with commit `9a6d6eb` and annotated tag
+  `archive/feature/enhancements-2026`.
+- [x] Remove `indicatif` progress/status updates from the `develop` code while retaining
+  `--timer`, `--no-banner`, formatter styling, and ordered output.
+- [x] Update current product/architecture docs, restore a documentation index, and record the
+  simpler terminal-output policy.
+- [x] Validate the change: `cargo test` passed (30 unit tests and 6 end-to-end tests);
+  `cargo tree -i indicatif` found no such dependency; source searches found no progress-bar
+  constructor or `indicatif` references; `git diff --check` reported no whitespace errors.
+- [x] Run `cargo fmt --all -- --check`; it reports pre-existing formatting differences across
+  source and test files, so unrelated formatting was left unchanged.

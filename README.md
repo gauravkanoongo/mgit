@@ -16,6 +16,7 @@ Fast, asynchronous multi-repository Git CLI utility with guaranteed deterministi
 - **Fast Directory Pruning**: Avoids traversing into `.git/`, `node_modules/`, `target/`, `.cargo/`, `vendor/`, `build/`, and virtual environments.
 - **Worktree & Submodule Support**: Automatically identifies both `.git` directories and `.git` pointer files (`gitdir: ...`).
 - **AI-Agent & Scripting Ready (`--json`)**: Emits structured JSON schemas with per-repository exit codes, diffs, changes detection, and execution timings.
+- **Simple terminal output**: Results stream in deterministic order without cursor control, status-line redraws, or a TUI.
 
 ---
 
@@ -51,6 +52,12 @@ mgit status -s -- --json
 
 # Abort remaining tasks on first failure
 mgit pull -- --fail-fast
+
+# Include per-repository and total execution timings
+mgit status -- --timer
+
+# Hide the startup banner
+mgit status -- --no-banner
 ```
 
 ### Available `mgit` Options
@@ -64,8 +71,14 @@ mgit pull -- --fail-fast
 | | `--json` | Output structured JSON report for automation and AI agents |
 | | `--summary-only` | Print only the final tally summary |
 | | `--fail-fast` | Cancel remaining async operations on first error |
+| | `--timer` | Display per-repository and total execution duration |
+| | `--no-banner` | Suppress the ASCII startup banner |
 | `-d` | `--max-depth <N>` | Limit directory traversal depth |
 | `-h` | `--help` | Display usage and help |
+
+mgit does not draw a live progress/status bar. Interactive runs use the same ordinary output
+streaming behavior as redirected runs, avoiding terminal cursor updates interleaved with command
+output.
 
 ---
 

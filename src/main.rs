@@ -56,15 +56,6 @@ async fn run() -> i32 {
         return 0;
     }
 
-    // Create interactive progress spinner only when connected to an interactive TTY and not under --json / --quiet
-    use std::io::IsTerminal;
-    let is_interactive = std::io::stdout().is_terminal() && !config.json && !config.quiet && !config.summary_only;
-    let pb = if is_interactive {
-        Some(output::create_progress_bar(total))
-    } else {
-        None
-    };
-
     let cancel_token = CancellationToken::new();
 
     // Hook up Ctrl+C cancellation
@@ -89,7 +80,7 @@ async fn run() -> i32 {
     ));
 
     // Stream and render results in strict sequential order
-    let stats = stream_in_order(total, rx, &config, formatter.as_ref(), pb.as_ref()).await;
+    let stats = stream_in_order(total, rx, &config, formatter.as_ref()).await;
     let _ = worker_handle.await;
 
     formatter.render_summary(&stats, &config);

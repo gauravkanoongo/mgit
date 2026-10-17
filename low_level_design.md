@@ -102,6 +102,8 @@ pub struct MgitConfig {
     pub summary_only: bool,       // Skip per-repo output, only print summary
     pub fail_fast: bool,          // Abort remaining jobs on first non-zero status
     pub max_depth: Option<usize>, // Directory traversal recursion limit
+    pub timer: bool,              // Display execution durations
+    pub no_banner: bool,          // Suppress the ASCII startup banner
 }
 
 impl Default for MgitConfig {
@@ -120,6 +122,8 @@ impl Default for MgitConfig {
             summary_only: false,
             fail_fast: false,
             max_depth: None,
+            timer: false,
+            no_banner: false,
         }
     }
 }
@@ -213,6 +217,9 @@ pub async fn execute_repo(
 
 Guarantees **in-order sequential streaming**. Even though repositories finish out-of-order in the async runtime, output is emitted in strict sequential order `0, 1, 2, ...`.
 
+Terminal output uses ordinary writes only. It does not draw or update a spinner, progress bar,
+status line, or TUI; this avoids cursor-control output affecting the command output stream.
+
 #### In-Order Streamer Algorithm:
 ```rust
 use tokio::sync::mpsc;
@@ -222,7 +229,7 @@ pub async fn stream_in_order(
     total: usize,
     mut rx: mpsc::Receiver<RepoResult>,
     config: &MgitConfig,
-    formatter: impl OutputFormatter,
+    formatter: &dyn OutputFormatter,
 ) -> SummaryStats {
     let mut pending = HashMap::<usize, RepoResult>::new();
     let mut next_expected_id = 0;
@@ -232,7 +239,7 @@ pub async fn stream_in_order(
         // Check if the next expected result is already buffered
         if let Some(result) = pending.remove(&next_expected_id) {
             stats.record(&result);
-            formatter.render(&result, config);
+            formatter.render_repo(&result, config);
             next_expected_id += 1;
             continue;
         }
@@ -242,7 +249,7 @@ pub async fn stream_in_order(
             Some(result) => {
                 if result.id == next_expected_id {
                     stats.record(&result);
-                    formatter.render(&result, config);
+                    formatter.render_repo(&result, config);
                     next_expected_id += 1;
                 } else {
                     pending.insert(result.id, result);
@@ -369,4 +376,3 @@ tempfile = "3.17"       # For hermetic integration tests
 3. `tests::test_exit_codes`:
    - Run a command that fails in one repo (e.g. `mgit checkout non-existent-branch`).
    - Verify process exits with code `1`.
-

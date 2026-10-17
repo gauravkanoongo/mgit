@@ -130,6 +130,8 @@ All flags after the final `--` are parsed for `mgit`:
 | **`--json`** | | Emit structured JSON output (ideal for AI agents and scripts). |
 | **`--summary-only`** | | Print only the final tally summary. |
 | **`--fail-fast`** | | Cancel remaining async tasks immediately upon the first failure. |
+| **`--timer`** | | Display per-repository and aggregate execution durations. |
+| **`--no-banner`** | | Suppress the ASCII startup banner. |
 | **`--max-depth <N>`**| `-d` | Limit directory discovery recursion depth. |
 | **`--help`** | `-h` | Display usage and help. |
 
@@ -182,3 +184,17 @@ mgit fetch --all -- --fail-fast --summary-only
   - Ensure correct exit codes (`0` for all success, `1` for failures).
 - [ ] **Step 6: Comprehensive Automated Integration Tests**
   - Integration tests creating temporary repos with `tempfile` testing both text and JSON outputs, `--` splitting, and failure codes.
+
+---
+
+## 8. Maintained Terminal UX Direction
+
+The maintained terminal UX is deliberately plain and deterministic: write repository output in
+repository order, then print the final summary. Do not redraw a spinner, progress bar, status line,
+or TUI over command output. `--timer`, `--no-banner`, and the existing formatter styling are
+independent options and remain supported.
+
+The `v0.1.0` tag is the stable behavior reference; `v0.2.0` is the starting point for this
+simplification. The failed progress/status-bar and TUI experiments are closed and retained only
+for historical reference. See [branch-retirement.md](./branch-retirement.md) for the comparison,
+carry-forward decisions, and branch archival record.
