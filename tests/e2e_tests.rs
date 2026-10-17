@@ -95,9 +95,10 @@ fn test_e2e_json_output_machine_readable() {
 
     assert!(output.status.success());
     let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(output.stderr.is_empty());
 
-    let parsed: serde_json::Value = serde_json::from_str(&stdout)
-        .expect("Stdout should be valid JSON document");
+    let parsed: serde_json::Value =
+        serde_json::from_str(&stdout).expect("Stdout should be valid JSON document");
 
     assert_eq!(parsed["total_repos"], 2);
     assert_eq!(parsed["command"], serde_json::json!(["status", "-s"]));
@@ -185,4 +186,3 @@ fn test_e2e_no_color_environment() {
     // Verify no ANSI escape codes (e.g. \x1b[)
     assert!(!stdout.contains("\x1b["));
 }
-

@@ -217,8 +217,17 @@ pub async fn execute_repo(
 
 Guarantees **in-order sequential streaming**. Even though repositories finish out-of-order in the async runtime, output is emitted in strict sequential order `0, 1, 2, ...`.
 
-Terminal output uses ordinary writes only. It does not draw or update a spinner, progress bar,
-status line, or TUI; this avoids cursor-control output affecting the command output stream.
+Human-readable terminal output uses normal-weight text and ordinary ordered writes. The banner
+starts without a leading blank line, and the output header is followed by a separator before
+repository results. Status markers use colored circles consistently: blue for the command header,
+green for success, orange for a Git failure/warning, and red for an execution error. Each
+repository marker is followed by a space before the repository path.
+
+During discovery, interactive non-JSON runs show a dotted repository-count status on stderr.
+The spinner redraws that status in place and leaves a final completion line visible. It does not
+write to stdout, so it cannot interleave with or contaminate command output or JSON. When discovery
+finishes, repository commands run in the existing deterministic sorted order and their results are
+rendered in that order as soon as the next expected result is available.
 
 #### In-Order Streamer Algorithm:
 ```rust

@@ -62,12 +62,21 @@ fn is_git_repo(dir: &Path) -> bool {
 /// Scans the filesystem according to `MgitConfig` and returns a deterministically sorted
 /// list of discovered repositories with assigned sequential IDs.
 pub fn discover_repos(config: &MgitConfig) -> Result<Vec<RepoEntry>, std::io::Error> {
+    discover_repos_with_progress(config, |_| {})
+}
+
+/// Scans repositories and reports the cumulative discovery count after each match.
+pub fn discover_repos_with_progress(
+    config: &MgitConfig,
+    mut on_repo_discovered: impl FnMut(usize),
+) -> Result<Vec<RepoEntry>, std::io::Error> {
     let root = &config.dir;
     let mut discovered_paths = Vec::new();
 
     // Check if the root directory itself is a git repository
     if is_git_repo(root) {
         discovered_paths.push(root.clone());
+        on_repo_discovered(discovered_paths.len());
     }
 
     let mut walker = WalkDir::new(root).min_depth(1).follow_links(false);
@@ -87,6 +96,7 @@ pub fn discover_repos(config: &MgitConfig) -> Result<Vec<RepoEntry>, std::io::Er
             // If this is a git repo, record it and prune descending into it
             if is_git_repo(entry.path()) {
                 discovered_paths.push(entry.path().to_path_buf());
+                on_repo_discovered(discovered_paths.len());
                 it.skip_current_dir();
                 continue;
             }
@@ -259,6 +269,25 @@ mod tests {
     }
 
     #[test]
+    fn test_discovery_progress_reports_repository_count() {
+        let temp = tempdir().unwrap();
+        fs::create_dir_all(temp.path().join("repo_a").join(".git")).unwrap();
+        fs::create_dir_all(temp.path().join("repo_b").join(".git")).unwrap();
+
+        let config = MgitConfig {
+            dir: temp.path().to_path_buf(),
+            ..MgitConfig::default()
+        };
+        let mut reported_counts = Vec::new();
+
+        let repos =
+            discover_repos_with_progress(&config, |count| reported_counts.push(count)).unwrap();
+
+        assert_eq!(repos.len(), 2);
+        assert_eq!(reported_counts, vec![1, 2]);
+    }
+
+    #[test]
     fn test_max_depth_limiting() {
         let temp = tempdir().unwrap();
 
@@ -281,4 +310,3 @@ mod tests {
         assert_eq!(repos[0].path, shallow);
     }
 }
-

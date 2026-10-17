@@ -73,13 +73,14 @@ impl<W: Write + Send + Sync> TerminalFormatter<W> {
 }
 
 // Royal & Pastel styles using standard 256/ANSI codes
-const ACCENT_BLUE: Style = Style::new().fg_color(Some(Color::Ansi256(anstyle::Ansi256Color(111)))).bold(); // Soft Cornflower / Royal Blue
+const ACCENT_BLUE: Style = Style::new().fg_color(Some(Color::Ansi256(anstyle::Ansi256Color(111)))); // Soft Cornflower / Royal Blue
 const ACCENT_CYAN: Style = Style::new().fg_color(Some(Color::Ansi256(anstyle::Ansi256Color(117)))); // Soft Pastel Cyan
-const PASTEL_GREEN: Style = Style::new().fg_color(Some(Color::Ansi256(anstyle::Ansi256Color(114)))).bold(); // Soft Mint Green
-const PASTEL_PEACH: Style = Style::new().fg_color(Some(Color::Ansi256(anstyle::Ansi256Color(216)))).bold(); // Soft Amber/Peach Warning
-const PASTEL_ROSE: Style = Style::new().fg_color(Some(Color::Ansi256(anstyle::Ansi256Color(210)))).bold();  // Soft Rose/Coral Error
-const DIM_GRAY: Style = Style::new().fg_color(Some(Color::Ansi256(anstyle::Ansi256Color(240))));    // Dark Gray Dimmed Separator
-const DIM_LABEL: Style = Style::new().fg_color(Some(Color::Ansi256(anstyle::Ansi256Color(245))));   // Subtle Dim Label
+const PASTEL_GREEN: Style = Style::new().fg_color(Some(Color::Ansi256(anstyle::Ansi256Color(114)))); // Soft Mint Green
+const PASTEL_PEACH: Style = Style::new().fg_color(Some(Color::Ansi256(anstyle::Ansi256Color(216)))); // Soft Amber/Peach Warning
+const PASTEL_ROSE: Style = Style::new().fg_color(Some(Color::Ansi256(anstyle::Ansi256Color(210)))); // Soft Rose/Coral Error
+const DIM_GRAY: Style = Style::new().fg_color(Some(Color::Ansi256(anstyle::Ansi256Color(240)))); // Dark Gray Dimmed Separator
+const DIM_LABEL: Style = Style::new().fg_color(Some(Color::Ansi256(anstyle::Ansi256Color(245)))); // Subtle Dim Label
+const SEPARATOR_LINE: &str = "┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈";
 
 impl<W: Write + Send + Sync> OutputFormatter for TerminalFormatter<W> {
     fn render_banner(&self, config: &MgitConfig) {
@@ -99,7 +100,6 @@ impl<W: Write + Send + Sync> OutputFormatter for TerminalFormatter<W> {
             r"            |___/       ",
         ];
 
-        let _ = writeln!(out);
         for line in banner_lines {
             let _ = writeln!(out, "{ACCENT_BLUE}{line}{ACCENT_BLUE:#}");
         }
@@ -110,7 +110,7 @@ impl<W: Write + Send + Sync> OutputFormatter for TerminalFormatter<W> {
         let mut out = self.writer.lock().unwrap();
         let _ = writeln!(
             out,
-            "⚡ {ACCENT_CYAN}Running{ACCENT_CYAN:#} 'git {}' {DIM_LABEL}on{DIM_LABEL:#} {ACCENT_BLUE}{count}{ACCENT_BLUE:#} {DIM_LABEL}projects...{DIM_LABEL:#}\n",
+            "🔵 {ACCENT_CYAN}Running{ACCENT_CYAN:#} 'git {}' {DIM_LABEL}on{DIM_LABEL:#} {ACCENT_BLUE}{count}{ACCENT_BLUE:#} {DIM_LABEL}projects...{DIM_LABEL:#}\n{DIM_GRAY}{SEPARATOR_LINE}{DIM_GRAY:#}",
             command.join(" ")
         );
     }
@@ -132,9 +132,9 @@ impl<W: Write + Send + Sync> OutputFormatter for TerminalFormatter<W> {
         let mut out = self.writer.lock().unwrap();
 
         let (icon, header_style) = match result.status {
-            RepoStatus::Success => ("✔", PASTEL_GREEN),
-            RepoStatus::Failure => ("▲", PASTEL_PEACH),
-            RepoStatus::Error => ("✖", PASTEL_ROSE),
+            RepoStatus::Success => ("🟢", PASTEL_GREEN),
+            RepoStatus::Failure => ("🟠", PASTEL_PEACH),
+            RepoStatus::Error => ("🔴", PASTEL_ROSE),
         };
 
         // Header line with repo path and optional timer badge
@@ -164,7 +164,7 @@ impl<W: Write + Send + Sync> OutputFormatter for TerminalFormatter<W> {
         let mut out = self.writer.lock().unwrap();
 
         let _ = writeln!(out);
-        let _ = write!(out, "✨ {PASTEL_GREEN}Success: {}{PASTEL_GREEN:#}", stats.success);
+        let _ = write!(out, "🟢 {PASTEL_GREEN}Success: {}{PASTEL_GREEN:#}", stats.success);
 
         if stats.failure > 0 {
             let _ = write!(out, " · {PASTEL_PEACH}Warnings: {}{PASTEL_PEACH:#}", stats.failure);
@@ -417,6 +417,65 @@ mod tests {
         let final_out = String::from_utf8(formatter.writer.lock().unwrap().clone()).unwrap();
         assert!(final_out.contains("Warnings: 1"));
         assert!(final_out.contains("Errors: 1"));
+    }
+
+    #[test]
+    fn test_banner_and_terminal_text_use_normal_weight() {
+        let formatter = TerminalFormatter::new(Vec::new());
+        let config = MgitConfig::default();
+        formatter.render_banner(&config);
+        formatter.render_header(&["status".to_string()], 1);
+        formatter.render_repo(&dummy_result(0, "repo", RepoStatus::Success, ""), &config);
+
+        let out = String::from_utf8(formatter.writer.lock().unwrap().clone()).unwrap();
+        assert!(!out.starts_with('\n'));
+        assert!(!out.contains("\u{1b}[1m"));
+        assert!(!out.contains("\u{1b}[1;"));
+        assert!(!out.contains(";1m"));
+        assert!(out.contains("🔵 "));
+        assert!(out.contains("Running"));
+        assert!(out.contains("🟢 repo"));
+        assert!(!out.contains("✅"));
+        assert!(!out.contains("⚡"));
+        assert!(!out.contains("✨"));
+        assert!(out.find(SEPARATOR_LINE).unwrap() < out.find("🟢 repo").unwrap());
+    }
+
+    #[test]
+    fn test_status_markers_use_colored_circles() {
+        let formatter = TerminalFormatter::new(Vec::new());
+        let config = MgitConfig::default();
+        formatter.render_repo(
+            &dummy_result(0, "success_repo", RepoStatus::Success, ""),
+            &config,
+        );
+        formatter.render_repo(
+            &dummy_result(1, "warning_repo", RepoStatus::Failure, ""),
+            &config,
+        );
+        formatter.render_repo(
+            &dummy_result(2, "error_repo", RepoStatus::Error, ""),
+            &config,
+        );
+        formatter.render_summary(
+            &SummaryStats {
+                total: 3,
+                success: 1,
+                failure: 1,
+                error: 1,
+                elapsed_ms: 0,
+            },
+            &config,
+        );
+
+        let out = String::from_utf8(formatter.writer.lock().unwrap().clone()).unwrap();
+        assert!(out.contains("🟢 success_repo"));
+        assert!(out.contains("🟠 warning_repo"));
+        assert!(out.contains("🔴 error_repo"));
+        assert!(out.contains("🟢 "));
+        assert!(out.contains("Success: 1"));
+        assert!(!out.contains("▲"));
+        assert!(!out.contains("✖"));
     }
 
     #[test]

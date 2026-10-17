@@ -99,6 +99,9 @@ LLM context windows are precious. Running `mgit status` across 100 repositories 
 ### D. Clean Stream Separation & ANSI Neutrality
 - Respect standard `NO_COLOR=1` environment variable and auto-detect when `stdout` is not a TTY (piped to another tool or agent subprocess).
 - When redirected or run under `--json`, all ANSI color codes and cursor movement escapes are cleanly stripped.
+- During interactive discovery, show a lightweight dotted repository-count status on stderr and
+  leave its completion line visible. Keep it separate from stdout; place a separator before the
+  ordered per-repository output. Disable this status for JSON output and when stderr is not a TTY.
 
 ---
 

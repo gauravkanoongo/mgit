@@ -16,7 +16,7 @@ Fast, asynchronous multi-repository Git CLI utility with guaranteed deterministi
 - **Fast Directory Pruning**: Avoids traversing into `.git/`, `node_modules/`, `target/`, `.cargo/`, `vendor/`, `build/`, and virtual environments.
 - **Worktree & Submodule Support**: Automatically identifies both `.git` directories and `.git` pointer files (`gitdir: ...`).
 - **AI-Agent & Scripting Ready (`--json`)**: Emits structured JSON schemas with per-repository exit codes, diffs, changes detection, and execution timings.
-- **Simple terminal output**: Results stream in deterministic order without cursor control, status-line redraws, or a TUI.
+- **Human-readable discovery feedback**: Interactive runs show a lightweight repository-count spinner on stderr, retain the completion status, and separate discovery from ordered command output.
 
 ---
 
@@ -76,9 +76,11 @@ mgit status -- --no-banner
 | `-d` | `--max-depth <N>` | Limit directory traversal depth |
 | `-h` | `--help` | Display usage and help |
 
-mgit does not draw a live progress/status bar. Interactive runs use the same ordinary output
-streaming behavior as redirected runs, avoiding terminal cursor updates interleaved with command
-output.
+Interactive runs show discovery progress only when stderr is a terminal and JSON output is not
+selected. The dotted status line reports the number of repositories found and remains visible
+after discovery completes. A separator precedes repository results; results retain the existing
+deterministic order. Progress is written to stderr, leaving stdout and JSON output free of status
+text.
 
 ---
 

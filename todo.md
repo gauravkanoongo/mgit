@@ -124,3 +124,43 @@
   constructor or `indicatif` references; `git diff --check` reported no whitespace errors.
 - [x] Run `cargo fmt --all -- --check`; it reports pre-existing formatting differences across
   source and test files, so unrelated formatting was left unchanged.
+
+### Follow-up: Terminal polish and discovery feedback (2026-10-17)
+
+> Implementation is complete; verification details are recorded below.
+
+- [x] Remove the leading blank line before the ASCII banner, and remove bold styling from all
+  terminal formatter styles so text uses normal font weight.
+- [x] Replace the successful-repository glyph with a compact green check/mark and explicitly
+  retain one separating space before the repository path, matching the warning marker layout.
+- [x] Add visible repository-discovery feedback for interactive human runs:
+  - [x] Show a lightweight dotted spinner and the number of repositories found while scanning.
+  - [x] Leave a final discovery-completion status visible and put a separator before repository
+    output, as preferred after considering the terminal flow.
+  - [x] Gate the indicator on stderr terminal capability and disable it for JSON output; status
+    text remains off stdout.
+  - [x] Keep the scan lightweight: no TUI, temporary files, sockets, or heavyweight progress
+    dependency unless implementation evidence shows one is needed.
+- [x] Preserve the current global path sort and in-order result output for this change:
+  discovery currently returns a complete sorted list before commands start, and the output
+  streamer already emits results in that order as each expected result becomes available.
+  Starting commands before discovery completes would require a bounded discovery-to-worker
+  pipeline and a decision between preserving global sort (which requires knowing all paths)
+  and switching to traversal order; this remains a separate design choice, not an implicit part
+  of the progress indicator.
+- [x] Add focused tests for banner spacing, absence of bold style, success-marker spacing, and
+  discovery progress lifecycle/counting.
+- [x] Update maintained UX/design documentation to match the implemented behavior.
+- [x] Run the full `cargo test` suite on Windows: 33 unit tests and 6 end-to-end tests passed.
+- [x] Existing end-to-end coverage confirms JSON remains parseable, stdout preserves ordered
+  output, and the non-interactive JSON run has no discovery progress on stderr.
+- [x] Preview the retained discovery status, banner, separator, and repository-output flow in a
+  Windows VS Code task terminal.
+- [ ] Manually assess spinner animation/layout on macOS and Linux terminals.
+
+### Follow-up: Colored terminal status markers (2026-10-17)
+
+- [x] Replace terminal emoji/status glyphs with colored-circle indicators: blue for the command
+  header, green for success, orange for Git failures/warnings, and red for execution errors.
+- [x] Update the terminal formatter regression tests and low-level design description to match.
+- [x] Run full `cargo test` (34 unit tests and 6 end-to-end tests passed) and `git diff --check`.
