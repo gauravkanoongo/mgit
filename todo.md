@@ -164,3 +164,12 @@
   header, green for success, orange for Git failures/warnings, and red for execution errors.
 - [x] Update the terminal formatter regression tests and low-level design description to match.
 - [x] Run full `cargo test` (34 unit tests and 6 end-to-end tests passed) and `git diff --check`.
+
+### Follow-up: Configurable worker threads (2026-10-17)
+
+- [x] Use `-j` / `--jobs` for both concurrent Git command limit and Tokio runtime worker threads.
+- [x] Change the default to 2 while preserving a valid positive `MGIT_PARALLEL` override.
+- [x] Update CLI help and maintained usage/architecture docs; remove the now-unused `num_cpus`
+  dependency.
+- [x] Run `cargo test`: 34 unit tests and 6 end-to-end tests passed; Cargo updated the lockfile
+  after removing the unused `num_cpus` dependency.

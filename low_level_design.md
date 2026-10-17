@@ -95,7 +95,7 @@ use std::path::PathBuf;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MgitConfig {
     pub dir: PathBuf,              // Root path to search (default: ".")
-    pub jobs: usize,              // Max concurrent workers (default: env(MGIT_PARALLEL) or cpus * 8)
+    pub jobs: usize,              // Max concurrent Git commands and Tokio workers (default: env(MGIT_PARALLEL) or 2)
     pub quiet: bool,              // Suppress output for clean/warning-free repos
     pub only_changes: bool,       // Only show repos with non-empty stdout
     pub json: bool,               // Output structured JSON (one array or JSONL)
@@ -196,7 +196,9 @@ pub struct RepoResult {
 ```
 
 #### Concurrency & Execution Control:
-- Use `tokio::sync::Semaphore` initialized with `config.jobs`.
+- Build the Tokio multi-thread runtime with `worker_threads(config.jobs)` and initialize
+  `tokio::sync::Semaphore` with the same value, so `-j` bounds both runtime workers and concurrent
+  Git commands. The default is 2, overridable by `MGIT_PARALLEL`.
 - Use `tokio_util::sync::CancellationToken` for clean `--fail-fast` and `SIGINT` (Ctrl+C) handling.
 - Concurrently execute via `tokio::process::Command`:
   - `stdin(Stdio::null())`

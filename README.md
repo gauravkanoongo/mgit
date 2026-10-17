@@ -47,6 +47,9 @@ mgit status -s -- --only-changes
 # Run on a custom directory with 16 parallel workers
 mgit fetch --all -- -C /path/to/workspace -j 16
 
+# Limit both concurrent Git commands and Tokio worker threads to 4
+mgit status -- -j 4
+
 # Machine-readable JSON output (ideal for AI coding agents & scripts)
 mgit status -s -- --json
 
@@ -65,7 +68,7 @@ mgit status -- --no-banner
 | Flag | Option | Description |
 | :--- | :--- | :--- |
 | `-C` | `--dir <PATH>` | Root directory to search for git repositories (default: `.`) |
-| `-j` | `--jobs <N>` | Maximum concurrent async workers (default: `MGIT_PARALLEL` or `cpus * 8`) |
+| `-j` | `--jobs <N>` | Maximum concurrent Git commands and Tokio worker threads (default: `MGIT_PARALLEL` or `2`) |
 | `-q` | `--quiet` | Suppress output for clean repositories |
 | | `--only-changes` | Only display repositories that produced non-empty git stdout |
 | | `--json` | Output structured JSON report for automation and AI agents |
@@ -81,6 +84,9 @@ selected. The dotted status line reports the number of repositories found and re
 after discovery completes. A separator precedes repository results; results retain the existing
 deterministic order. Progress is written to stderr, leaving stdout and JSON output free of status
 text.
+
+`-j N` (or `--jobs N`) sets both the maximum number of concurrent Git commands and Tokio's
+asynchronous worker-thread count. The default is 2; `MGIT_PARALLEL` can override the default.
 
 ---
 

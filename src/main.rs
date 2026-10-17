@@ -15,25 +15,35 @@ use crate::discovery::{RepoEntry, discover_repos_with_progress};
 use crate::engine::run_engine;
 use crate::output::{JsonFormatter, OutputFormatter, TerminalFormatter, stream_in_order};
 
-#[tokio::main]
-async fn main() {
-    let exit_code = run().await;
-    std::process::exit(exit_code);
-}
-
-async fn run() -> i32 {
+fn main() {
     let (git_args, config) = match parse_cli(std::env::args()) {
         Ok(res) => res,
         Err(ArgsError::HelpRequested) => {
             println!("{}", args::help_text());
-            return 0;
+            return;
         }
         Err(err) => {
             eprintln!("{err}");
-            return 2;
+            std::process::exit(2);
         }
     };
 
+    let runtime = match tokio::runtime::Builder::new_multi_thread()
+        .worker_threads(config.jobs)
+        .enable_all()
+        .build()
+    {
+        Ok(runtime) => runtime,
+        Err(err) => {
+            eprintln!("mgit: Error creating async runtime: {err}");
+            std::process::exit(1);
+        }
+    };
+    let exit_code = runtime.block_on(run(git_args, config));
+    std::process::exit(exit_code);
+}
+
+async fn run(git_args: Vec<String>, config: crate::args::MgitConfig) -> i32 {
     let repos = match discover_repositories(&config).await {
         Ok(r) => r,
         Err(err) => {

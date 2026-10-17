@@ -442,7 +442,7 @@ mod tests {
         assert!(!out.contains("✅"));
         assert!(!out.contains("⚡"));
         assert!(!out.contains("✨"));
-        assert!(out.find(SEPARATOR_LINE).unwrap() < out.find("🟢 repo").unwrap());
+        assert!(out.find(SEPARATOR_LINE).unwrap() < out.find("● repo").unwrap());
     }
 
     #[test]

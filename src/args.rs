@@ -34,7 +34,7 @@ impl std::error::Error for ArgsError {}
 pub struct MgitConfig {
     /// Root directory to search for git repositories (default: ".").
     pub dir: PathBuf,
-    /// Maximum concurrent async jobs (default: MGIT_PARALLEL or num_cpus * 8).
+    /// Maximum concurrent Git commands and Tokio worker threads (default: MGIT_PARALLEL or 2).
     pub jobs: usize,
     /// Only display repositories with warnings, errors, or output.
     pub quiet: bool,
@@ -56,10 +56,7 @@ pub struct MgitConfig {
 
 impl Default for MgitConfig {
     fn default() -> Self {
-        let default_jobs = std::env::var("MGIT_PARALLEL")
-            .ok()
-            .and_then(|v| v.parse::<usize>().ok())
-            .unwrap_or_else(|| num_cpus::get() * 8);
+        let default_jobs = resolve_jobs(std::env::var("MGIT_PARALLEL").ok().as_deref());
 
         Self {
             dir: PathBuf::from("."),
@@ -76,6 +73,13 @@ impl Default for MgitConfig {
     }
 }
 
+fn resolve_jobs(env_value: Option<&str>) -> usize {
+    env_value
+        .and_then(|value| value.parse::<usize>().ok())
+        .filter(|&jobs| jobs > 0)
+        .unwrap_or(2)
+}
+
 /// Generates human-readable help text.
 pub fn help_text() -> &'static str {
     concat!(
@@ -89,7 +93,7 @@ pub fn help_text() -> &'static str {
         "    All options after the LAST '--' configure mgit behavior.\n\n",
         "MGIT OPTIONS (after last '--'):\n",
         "    -C, --dir <PATH>      Root directory to search (default: .)\n",
-        "    -j, --jobs <N>        Maximum concurrent worker jobs (default: cpus * 8)\n",
+        "    -j, --jobs <N>        Git command and Tokio worker thread limit (default: 2)\n",
         "    -q, --quiet           Only print repos with errors or non-empty output\n",
         "    --only-changes        Only print repos that have non-empty git stdout\n",
         "    --json                Output structured JSON (AI and machine-readable)\n",
@@ -348,16 +352,10 @@ mod tests {
 
     #[test]
     fn test_mgit_parallel_env_fallback() {
-        // Test parsing with an explicit environment-based config loader
-        let resolve_jobs = |env_val: Option<&str>| -> usize {
-            env_val
-                .and_then(|v| v.parse::<usize>().ok())
-                .unwrap_or_else(|| num_cpus::get() * 8)
-        };
-
         assert_eq!(resolve_jobs(Some("42")), 42);
-        assert_eq!(resolve_jobs(None), num_cpus::get() * 8);
-        assert_eq!(resolve_jobs(Some("invalid")), num_cpus::get() * 8);
+        assert_eq!(resolve_jobs(None), 2);
+        assert_eq!(resolve_jobs(Some("invalid")), 2);
+        assert_eq!(resolve_jobs(Some("0")), 2);
     }
 
     #[test]
@@ -377,4 +375,3 @@ mod tests {
         assert!(format!("{}", ArgsError::HelpRequested).contains("USAGE:"));
     }
 }
-

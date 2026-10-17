@@ -126,7 +126,7 @@ All flags after the final `--` are parsed for `mgit`:
 
 | Option | Flag | Description |
 | :--- | :--- | :--- |
-| **`--jobs <N>`** | `-j` | Maximum concurrent async workers (defaults to `MGIT_PARALLEL` or `cpus * 8`). |
+| **`--jobs <N>`** | `-j` | Maximum concurrent Git commands and Tokio worker threads (defaults to `MGIT_PARALLEL` or `2`). |
 | **`--dir <PATH>`** | `-C` | Root directory to search for git repositories (default: current directory). |
 | **`--quiet`** | `-q` | Only print repositories that produced output or errors. |
 | **`--only-changes`** | | Only print repositories with non-empty git stdout. |
