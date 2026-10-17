@@ -219,7 +219,7 @@ Guarantees **in-order sequential streaming**. Even though repositories finish ou
 
 Human-readable terminal output uses normal-weight text and ordinary ordered writes. The banner
 starts without a leading blank line, and the output header is followed by a separator before
-repository results. Status markers use colored circles consistently: blue for the command header,
+repository results. Status markers use colored ● characters consistently: blue for the command header,
 green for success, orange for a Git failure/warning, and red for an execution error. Each
 repository marker is followed by a space before the repository path.
 

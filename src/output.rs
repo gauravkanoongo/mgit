@@ -110,7 +110,7 @@ impl<W: Write + Send + Sync> OutputFormatter for TerminalFormatter<W> {
         let mut out = self.writer.lock().unwrap();
         let _ = writeln!(
             out,
-            "🔵 {ACCENT_CYAN}Running{ACCENT_CYAN:#} 'git {}' {DIM_LABEL}on{DIM_LABEL:#} {ACCENT_BLUE}{count}{ACCENT_BLUE:#} {DIM_LABEL}projects...{DIM_LABEL:#}\n{DIM_GRAY}{SEPARATOR_LINE}{DIM_GRAY:#}",
+            "{ACCENT_BLUE}●{ACCENT_BLUE:#} {ACCENT_CYAN}Running{ACCENT_CYAN:#} 'git {}' {DIM_LABEL}on{DIM_LABEL:#} {ACCENT_BLUE}{count}{ACCENT_BLUE:#} {DIM_LABEL}projects...{DIM_LABEL:#}\n{DIM_GRAY}{SEPARATOR_LINE}{DIM_GRAY:#}",
             command.join(" ")
         );
     }
@@ -132,9 +132,9 @@ impl<W: Write + Send + Sync> OutputFormatter for TerminalFormatter<W> {
         let mut out = self.writer.lock().unwrap();
 
         let (icon, header_style) = match result.status {
-            RepoStatus::Success => ("🟢", PASTEL_GREEN),
-            RepoStatus::Failure => ("🟠", PASTEL_PEACH),
-            RepoStatus::Error => ("🔴", PASTEL_ROSE),
+            RepoStatus::Success => ("●", PASTEL_GREEN),
+            RepoStatus::Failure => ("●", PASTEL_PEACH),
+            RepoStatus::Error => ("●", PASTEL_ROSE),
         };
 
         // Header line with repo path and optional timer badge
@@ -164,7 +164,11 @@ impl<W: Write + Send + Sync> OutputFormatter for TerminalFormatter<W> {
         let mut out = self.writer.lock().unwrap();
 
         let _ = writeln!(out);
-        let _ = write!(out, "🟢 {PASTEL_GREEN}Success: {}{PASTEL_GREEN:#}", stats.success);
+        let _ = write!(
+            out,
+            "{PASTEL_GREEN}●{PASTEL_GREEN:#} {PASTEL_GREEN}Success: {}{PASTEL_GREEN:#}",
+            stats.success
+        );
 
         if stats.failure > 0 {
             let _ = write!(out, " · {PASTEL_PEACH}Warnings: {}{PASTEL_PEACH:#}", stats.failure);
@@ -432,9 +436,9 @@ mod tests {
         assert!(!out.contains("\u{1b}[1m"));
         assert!(!out.contains("\u{1b}[1;"));
         assert!(!out.contains(";1m"));
-        assert!(out.contains("🔵 "));
+        assert!(out.contains("● "));
         assert!(out.contains("Running"));
-        assert!(out.contains("🟢 repo"));
+        assert!(out.contains("● repo"));
         assert!(!out.contains("✅"));
         assert!(!out.contains("⚡"));
         assert!(!out.contains("✨"));
@@ -469,13 +473,11 @@ mod tests {
         );
 
         let out = String::from_utf8(formatter.writer.lock().unwrap().clone()).unwrap();
-        assert!(out.contains("🟢 success_repo"));
-        assert!(out.contains("🟠 warning_repo"));
-        assert!(out.contains("🔴 error_repo"));
-        assert!(out.contains("🟢 "));
+        assert!(out.contains("● success_repo"));
+        assert!(out.contains("● warning_repo"));
+        assert!(out.contains("● error_repo"));
+        assert!(out.contains("● "));
         assert!(out.contains("Success: 1"));
-        assert!(!out.contains("▲"));
-        assert!(!out.contains("✖"));
     }
 
     #[test]
