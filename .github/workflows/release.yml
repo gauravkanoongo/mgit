@@ -1,73 +1,203 @@
-name: Release Binaries
+name: Build and Release
 
 on:
+  push:
+    branches:
+      - "**"
   workflow_dispatch:
     inputs:
-      release_type:
-        description: 'Release type (nightly or release)'
+      build_type:
+        description: Build workflow artifacts only, a nightly prerelease, or a stable SemVer release
         required: true
-        default: 'nightly'
+        default: nightly
         type: choice
         options:
+          - local
           - nightly
           - release
-      tag_name:
-        description: 'Tag name (optional, defaults to nightly or v<version>)'
-        required: false
-        default: ''
-        type: string
+      bump:
+        description: Stable release bump (auto reads Conventional Commits)
+        required: true
+        default: auto
+        type: choice
+        options:
+          - auto
+          - patch
+          - minor
+          - major
 
 permissions:
   contents: write
 
 jobs:
+  resolve-version:
+    name: Resolve semantic version
+    if: github.event_name == 'workflow_dispatch' || github.ref_name == github.event.repository.default_branch
+    runs-on: ubuntu-latest
+    outputs:
+      should_build: ${{ steps.version.outputs.should_build }}
+      version: ${{ steps.version.outputs.version }}
+      tag_name: ${{ steps.version.outputs.tag_name }}
+      prerelease: ${{ steps.version.outputs.prerelease }}
+      publish_release: ${{ steps.version.outputs.publish_release }}
+      commit_sha: ${{ steps.version.outputs.commit_sha }}
+    steps:
+      - name: Check out full history
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Calculate SemVer and build metadata
+        id: version
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BUILD_TYPE: ${{ inputs.build_type }}
+          BUMP: ${{ inputs.bump }}
+          GITHUB_SHA: ${{ github.sha }}
+          RUN_NUMBER: ${{ github.run_number }}
+        run: |
+          set -euo pipefail
+
+          PACKAGE_VERSION=$(sed -nE 's/^version = "([^"]+)".*/\1/p' Cargo.toml | head -n 1)
+          if [[ ! "$PACKAGE_VERSION" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
+            echo "Cargo.toml must contain a stable MAJOR.MINOR.PATCH package version" >&2
+            exit 1
+          fi
+
+          COMMIT_SHA=$(git rev-parse "$GITHUB_SHA")
+          if [ "$EVENT_NAME" = "workflow_dispatch" ] &&
+            [[ "$BUILD_TYPE" != "local" && "$BUILD_TYPE" != "nightly" && "$BUILD_TYPE" != "release" ]]; then
+            echo "Unsupported build type: $BUILD_TYPE" >&2
+            exit 1
+          fi
+          LATEST_TAG=""
+          BASE_VERSION="$PACKAGE_VERSION"
+          while IFS= read -r candidate; do
+            candidate_version="${candidate#v}"
+            candidate_core="${candidate_version%%+*}"
+            if [[ "$candidate_core" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
+              LATEST_TAG="$candidate"
+              BASE_VERSION="$candidate_core"
+              break
+            fi
+          done < <(git tag --merged "$COMMIT_SHA" --sort=-v:refname)
+
+          bump_level=0
+          commit_range="$COMMIT_SHA"
+          if [ -n "$LATEST_TAG" ]; then
+            commit_range="${LATEST_TAG}..${COMMIT_SHA}"
+          fi
+
+          while IFS= read -r -d '' message; do
+            subject="${message%%$'\n'*}"
+            if [[ "$subject" == *"!:"* ]] || grep -qE '^BREAKING CHANGE(-[A-Z]+)?:' <<< "$message"; then
+              bump_level=3
+            elif [[ "$subject" =~ ^feat(\(.+\))?: ]] && [ "$bump_level" -lt 2 ]; then
+              bump_level=2
+            elif [[ "$subject" =~ ^(fix|perf)(\(.+\))?: ]] && [ "$bump_level" -lt 1 ]; then
+              bump_level=1
+            fi
+          done < <(git log --format=%B%x00 "$commit_range")
+
+          version="$BASE_VERSION"
+          prerelease=false
+          should_build=true
+          publish_release=false
+
+          if [ "$EVENT_NAME" = "workflow_dispatch" ] && [ "$BUILD_TYPE" = "local" ]; then
+            timestamp=$(date -u +'%Y%m%dT%H%M%SZ')
+            version="${BASE_VERSION}-local.${timestamp}.${RUN_NUMBER}"
+            prerelease=true
+          elif [ "$EVENT_NAME" = "workflow_dispatch" ] && [ "$BUILD_TYPE" = "nightly" ]; then
+            timestamp=$(date -u +'%Y%m%dT%H%M%SZ')
+            version="${BASE_VERSION}-nightly.${timestamp}.${RUN_NUMBER}"
+            prerelease=true
+            publish_release=true
+          else
+            if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+              case "$BUMP" in
+                patch) bump_level=1 ;;
+                minor) bump_level=2 ;;
+                major) bump_level=3 ;;
+                auto) ;;
+                *) echo "Unsupported bump: $BUMP" >&2; exit 1 ;;
+              esac
+            fi
+
+            if [ "$bump_level" -eq 0 ]; then
+              if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+                echo "No Conventional Commit release was detected. Choose patch, minor, or major, or add fix:/feat:/BREAKING CHANGE." >&2
+                exit 1
+              fi
+              should_build=false
+            else
+              IFS=. read -r major minor patch <<< "$BASE_VERSION"
+              case "$bump_level" in
+                1) patch=$((patch + 1)) ;;
+                2) minor=$((minor + 1)); patch=0 ;;
+                3) major=$((major + 1)); minor=0; patch=0 ;;
+              esac
+              version="${major}.${minor}.${patch}"
+              publish_release=true
+            fi
+          fi
+
+          tag_name="v${version}+${COMMIT_SHA}"
+          echo "Resolved version: $version+$COMMIT_SHA"
+          echo "Tag: $tag_name"
+          echo "should_build=$should_build" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "tag_name=$tag_name" >> "$GITHUB_OUTPUT"
+          echo "prerelease=$prerelease" >> "$GITHUB_OUTPUT"
+          echo "publish_release=$publish_release" >> "$GITHUB_OUTPUT"
+          echo "commit_sha=$COMMIT_SHA" >> "$GITHUB_OUTPUT"
+
   build:
     name: Build ${{ matrix.target }}
+    needs: resolve-version
+    if: needs.resolve-version.outputs.should_build == 'true'
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         include:
-          # Windows AMD64
           - os: windows-latest
             target: x86_64-pc-windows-msvc
             artifact_name: mgit-windows-amd64.exe
             use_cross: false
-
-          # Windows ARM64
           - os: windows-latest
             target: aarch64-pc-windows-msvc
             artifact_name: mgit-windows-arm64.exe
             use_cross: false
-
-          # Linux AMD64 (musl static binary)
           - os: ubuntu-latest
             target: x86_64-unknown-linux-musl
             artifact_name: mgit-linux-amd64
             use_cross: true
-
-          # Linux ARM64 (musl static binary)
           - os: ubuntu-latest
             target: aarch64-unknown-linux-musl
             artifact_name: mgit-linux-arm64
             use_cross: true
-
-          # macOS ARM64 (Apple Silicon)
           - os: macos-latest
             target: aarch64-apple-darwin
             artifact_name: mgit-macos-arm64
             use_cross: false
-
+    env:
+      MGIT_BUILD_VERSION: ${{ needs.resolve-version.outputs.version }}
+      CARGO_MGIT_BUILD_VERSION: ${{ needs.resolve-version.outputs.version }}
+      CARGO_MGIT_BUILD_SHA: ${{ needs.resolve-version.outputs.commit_sha }}
     steps:
-      - name: Checkout repository
+      - name: Check out release commit
         uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.resolve-version.outputs.commit_sha }}
 
       - name: Set up Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
 
-      - name: Install cross (if needed)
+      - name: Install cross
         if: matrix.use_cross
         run: cargo install cross --git https://github.com/cross-rs/cross
 
@@ -100,64 +230,29 @@ jobs:
           path: artifacts/${{ matrix.artifact_name }}
 
   publish-release:
-    name: Publish Release Assets
-    needs: build
+    name: Publish GitHub release
+    needs:
+      - resolve-version
+      - build
+    if: needs.resolve-version.outputs.should_build == 'true' && needs.resolve-version.outputs.publish_release == 'true'
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
       - name: Download all built artifacts
         uses: actions/download-artifact@v4
         with:
           path: release-assets
           merge-multiple: true
 
-      - name: Determine tag name & release title
-        id: release_info
-        shell: bash
-        env:
-          INPUT_TAG: ${{ inputs.tag_name }}
-          INPUT_TYPE: ${{ inputs.release_type }}
-        run: |
-          set -euo pipefail
-
-          # Extract version from Cargo.toml as reliable fallback
-          CARGO_VERSION=$(grep -m1 '^version = ' Cargo.toml | sed -E 's/.*"([^"]+)".*/\1/' || echo "0.2.0")
-          TIMESTAMP=$(date -u +'%Y%m%d%H%M')
-
-          if [ -n "${INPUT_TAG:-}" ]; then
-            TAG="$INPUT_TAG"
-            IS_PRERELEASE="false"
-          elif [ "${INPUT_TYPE:-}" = "release" ]; then
-            TAG="v${CARGO_VERSION}"
-            IS_PRERELEASE="false"
-          else
-            # Default to nightly
-            TAG="nightly-${TIMESTAMP}"
-            IS_PRERELEASE="true"
-          fi
-
-          # Absolute safety guarantee: TAG can NEVER be empty
-          if [ -z "$TAG" ]; then
-            TAG="v${CARGO_VERSION}-${TIMESTAMP}"
-          fi
-
-          echo "Selected Tag: $TAG (prerelease: $IS_PRERELEASE)"
-
-          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
-          echo "is_prerelease=${IS_PRERELEASE}" >> "$GITHUB_OUTPUT"
-
-      - name: Create GitHub Release and Upload Assets
+      - name: Create GitHub Release and upload assets
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ steps.release_info.outputs.tag }}
-          name: "mgit ${{ steps.release_info.outputs.tag }}"
-          prerelease: ${{ steps.release_info.outputs.is_prerelease == 'true' }}
+          tag_name: ${{ needs.resolve-version.outputs.tag_name }}
+          target_commitish: ${{ needs.resolve-version.outputs.commit_sha }}
+          name: mgit ${{ needs.resolve-version.outputs.tag_name }}
+          prerelease: ${{ needs.resolve-version.outputs.prerelease == 'true' }}
           draft: false
           files: release-assets/*
           generate_release_notes: true
           overwrite_files: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-

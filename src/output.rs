@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc;
 use anstyle::{Color, Style};
 
-use crate::args::MgitConfig;
+use crate::args::{MgitConfig, VERSION};
 
 /// Status outcome of a Git execution in a repository.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -103,7 +103,10 @@ impl<W: Write + Send + Sync> OutputFormatter for TerminalFormatter<W> {
         for line in banner_lines {
             let _ = writeln!(out, "{ACCENT_BLUE}{line}{ACCENT_BLUE:#}");
         }
-        let _ = writeln!(out, "  {DIM_LABEL}v{} · async parallel git orchestrator{DIM_LABEL:#}\n", env!("CARGO_PKG_VERSION"));
+        let _ = writeln!(
+            out,
+            "  {DIM_LABEL}v{VERSION} · async parallel git orchestrator{DIM_LABEL:#}\n"
+        );
     }
 
     fn render_header(&self, command: &[String], count: usize) {
@@ -432,6 +435,7 @@ mod tests {
         formatter.render_repo(&dummy_result(0, "repo", RepoStatus::Success, ""), &config);
 
         let out = String::from_utf8(formatter.writer.lock().unwrap().clone()).unwrap();
+        assert!(out.contains(&format!("v{VERSION} · async parallel git orchestrator")));
         assert!(!out.starts_with('\n'));
         assert!(!out.contains("\u{1b}[1m"));
         assert!(!out.contains("\u{1b}[1;"));

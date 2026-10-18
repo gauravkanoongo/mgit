@@ -6,6 +6,7 @@ use std::path::PathBuf;
 pub enum ArgsError {
     NoArguments,
     HelpRequested,
+    VersionRequested,
     UnknownOption(String),
     MissingValue(String),
     InvalidValue { option: String, value: String, details: String },
@@ -17,6 +18,7 @@ impl fmt::Display for ArgsError {
         match self {
             Self::NoArguments => write!(f, "mgit: Please provide some arguments to pass on to git."),
             Self::HelpRequested => write!(f, "{}", help_text()),
+            Self::VersionRequested => write!(f, "{}", version_text()),
             Self::UnknownOption(opt) => write!(f, "mgit: Unknown option after last '--': {opt}"),
             Self::MissingValue(opt) => write!(f, "mgit: Option '{opt}' requires a value"),
             Self::InvalidValue { option, value, details } => {
@@ -28,6 +30,8 @@ impl fmt::Display for ArgsError {
 }
 
 impl std::error::Error for ArgsError {}
+
+pub const VERSION: &str = env!("MGIT_BUILD_VERSION");
 
 /// Configuration for `mgit` execution parsed strictly after the final `--` delimiter.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -80,36 +84,40 @@ fn resolve_jobs(env_value: Option<&str>) -> usize {
         .unwrap_or(2)
 }
 
+pub fn version_text() -> String {
+    format!("mgit {VERSION}")
+}
+
 /// Generates human-readable help text.
-pub fn help_text() -> &'static str {
-    concat!(
-        "mgit ",
-        env!("CARGO_PKG_VERSION"),
-        "\nRun git commands across multiple repositories with in-order deterministic output.\n\n",
-        "USAGE:\n",
-        "    mgit <GIT_ARGS>... [-- <MGIT_OPTIONS>...]\n\n",
-        "RULE:\n",
-        "    All arguments before the LAST '--' are forwarded directly and untouched to git.\n",
-        "    All options after the LAST '--' configure mgit behavior.\n\n",
-        "MGIT OPTIONS (after last '--'):\n",
-        "    -C, --dir <PATH>      Root directory to search (default: .)\n",
-        "    -j, --jobs <N>        Git command and Tokio worker thread limit (default: 2)\n",
-        "    -q, --quiet           Only print repos with errors or non-empty output\n",
-        "    --only-changes        Only print repos that have non-empty git stdout\n",
-        "    --json                Output structured JSON (AI and machine-readable)\n",
-        "    --summary-only        Print only the final summary statistics\n",
-        "    --fail-fast           Cancel remaining running jobs on first failure\n",
-        "    --timer               Display execution duration timings\n",
-        "    --no-banner           Suppress ASCII banner\n",
-        "    -d, --max-depth <N>   Limit directory traversal depth\n",
-        "    -h, --help            Show this help information\n\n",
-        "EXAMPLES:\n",
-        "    mgit status\n",
-        "    mgit checkout main -- file.txt\n",
-        "    mgit status -- -q\n",
-        "    mgit pull --rebase -- -j 16\n",
-        "    mgit status -s -- --json --only-changes\n",
-        "    mgit checkout main -- file.txt -- --quiet -j 4\n"
+pub fn help_text() -> String {
+    format!(
+        "{}\nRun git commands across multiple repositories with in-order deterministic output.\n\n\
+         USAGE:\n\
+             mgit <GIT_ARGS>... [-- <MGIT_OPTIONS>...]\n\n\
+         RULE:\n\
+             All arguments before the LAST '--' are forwarded directly and untouched to git.\n\
+             All options after the LAST '--' configure mgit behavior.\n\n\
+         MGIT OPTIONS (after last '--'):\n\
+             -C, --dir <PATH>      Root directory to search (default: .)\n\
+             -j, --jobs <N>        Git command and Tokio worker thread limit (default: 2)\n\
+             -q, --quiet           Only print repos with errors or non-empty output\n\
+             --only-changes        Only print repos that have non-empty git stdout\n\
+             --json                Output structured JSON (AI and machine-readable)\n\
+             --summary-only        Print only the final summary statistics\n\
+             --fail-fast           Cancel remaining running jobs on first failure\n\
+             --timer               Display execution duration timings\n\
+             --no-banner           Suppress ASCII banner\n\
+             -d, --max-depth <N>   Limit directory traversal depth\n\
+             -h, --help            Show this help information\n\
+             -V, --version         Show version information\n\n\
+         EXAMPLES:\n\
+             mgit status\n\
+             mgit checkout main -- file.txt\n\
+             mgit status -- -q\n\
+             mgit pull --rebase -- -j 16\n\
+             mgit status -s -- --json --only-changes\n\
+             mgit checkout main -- file.txt -- --quiet -j 4",
+        version_text()
     )
 }
 
@@ -132,13 +140,17 @@ pub fn parse_cli(argv: impl IntoIterator<Item = String>) -> Result<(Vec<String>,
         None => (args, Vec::new()),
     };
 
-    // If git_args is empty (e.g. user ran `mgit -- --help`), verify if help was requested
+    // Handle standalone informational options before starting a Git command.
     let mut config = MgitConfig::default();
 
     if !mgit_raw_args.is_empty() {
         parse_mgit_options(&mgit_raw_args, &mut config)?;
-    } else if git_args.len() == 1 && (git_args[0] == "-h" || git_args[0] == "--help") {
-        return Err(ArgsError::HelpRequested);
+    } else if git_args.len() == 1 {
+        match git_args[0].as_str() {
+            "-h" | "--help" => return Err(ArgsError::HelpRequested),
+            "-V" | "--version" => return Err(ArgsError::VersionRequested),
+            _ => {}
+        }
     }
 
     if git_args.is_empty() {
@@ -223,6 +235,9 @@ fn parse_mgit_options(raw_args: &[String], config: &mut MgitConfig) -> Result<()
             }
             Short('h') | Long("help") => {
                 return Err(ArgsError::HelpRequested);
+            }
+            Short('V') | Long("version") => {
+                return Err(ArgsError::VersionRequested);
             }
             Long(opt) => return Err(ArgsError::UnknownOption(format!("--{opt}"))),
             Short(opt) => return Err(ArgsError::UnknownOption(format!("-{opt}"))),
@@ -351,6 +366,15 @@ mod tests {
     }
 
     #[test]
+    fn test_version_flag_triggers_version_signal() {
+        let argv1 = to_argv(&["--version"]);
+        assert_eq!(parse_cli(argv1), Err(ArgsError::VersionRequested));
+
+        let argv2 = to_argv(&["status", "--", "-V"]);
+        assert_eq!(parse_cli(argv2), Err(ArgsError::VersionRequested));
+    }
+
+    #[test]
     fn test_mgit_parallel_env_fallback() {
         assert_eq!(resolve_jobs(Some("42")), 42);
         assert_eq!(resolve_jobs(None), 2);
@@ -373,5 +397,6 @@ mod tests {
             "mgit: Option '-C' requires a value"
         );
         assert!(format!("{}", ArgsError::HelpRequested).contains("USAGE:"));
+        assert_eq!(format!("{}", ArgsError::VersionRequested), version_text());
     }
 }

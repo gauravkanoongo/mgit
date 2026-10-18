@@ -10,7 +10,7 @@ use std::time::Duration;
 use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
 
-use crate::args::{ArgsError, parse_cli};
+use crate::args::{ArgsError, parse_cli, version_text};
 use crate::discovery::{RepoEntry, discover_repos_with_progress};
 use crate::engine::run_engine;
 use crate::output::{JsonFormatter, OutputFormatter, TerminalFormatter, stream_in_order};
@@ -20,6 +20,10 @@ fn main() {
         Ok(res) => res,
         Err(ArgsError::HelpRequested) => {
             println!("{}", args::help_text());
+            return;
+        }
+        Err(ArgsError::VersionRequested) => {
+            println!("{}", version_text());
             return;
         }
         Err(err) => {
