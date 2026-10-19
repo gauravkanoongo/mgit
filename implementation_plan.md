@@ -170,3 +170,43 @@ Wire up `main.rs`, verify exit codes, and write end-to-end integration tests tha
 - [ ] `test_e2e_only_changes_filtering`: Only modified repository is printed.
 - [ ] `test_e2e_no_color_environment`: Asserts no ANSI codes present when `NO_COLOR=1`.
 
+---
+
+## Follow-up: Configuration, Exclusions, Help, and Discovery UX
+
+Config loading, partial config saving, help clarification, and the colored dotted discovery
+indicator are implemented. Repository exclusions remain planned. Preserve the current `--quiet`
+behavior.
+
+### A. Configuration and repository exclusions
+- [x] Load mgit settings from `~/.config/mgit.toml`, covering all mgit options (directory,
+  concurrency, output modes, traversal depth, and related flags). Define and test precedence:
+  built-in defaults, config file, environment overrides, then explicit CLI options.
+- [x] Add `--save-config` to persist only mgit settings explicitly supplied on this invocation.
+  Update those keys in `~/.config/mgit.toml` while preserving unspecified existing values and
+- [x] Update only explicitly supplied keys and preserve unspecified values and unrelated
+  sections; save before discovery/command execution and test partial updates.
+- [ ] Add a repository-exclusion section to that same TOML file; do not add a separate ignore
+  file. Support a multiline list of patterns, absolute and relative paths, glob wildcards
+  (including `**/*`-style patterns), and both `/` and `\` path separators.
+- [ ] Define path normalization and matching: relative patterns are evaluated relative to the
+  discovery root, absolute patterns against normalized absolute repository paths; excluded
+  repository directories are skipped during discovery. Specify glob edge cases before
+  implementation and test matching on Windows and Unix-style paths.
+- [ ] Test config discovery, missing/default config behavior, malformed TOML diagnostics,
+  precedence, and excluded repository pruning without changing the argument-routing contract.
+
+### B. Help and argument behavior
+- [x] Update `--help` to explain that arguments before the final `--` go to Git, mgit options
+  after the final `--` configure mgit, and standalone `-h`/`--help` and `-V`/`--version`
+  requests are handled by mgit as exceptions. Document that no Git arguments is an mgit usage
+  error. Keep examples aligned with actual parser behavior.
+
+### C. Discovery indicator evaluation
+- [x] Replace the plain dotted discovery indicator with a colored rotating dotted marker while
+  preserving TTY/JSON gating and stderr-only output.
+- [ ] Manually validate Unicode/color rendering and terminal width on macOS and Linux.
+
+### D. Quiet behavior
+- [ ] Leave `--quiet` semantics unchanged in this follow-up; any future behavioral redesign
+  requires a separate decision and tests.

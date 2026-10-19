@@ -3,6 +3,7 @@ pub mod discovery;
 pub mod engine;
 pub mod output;
 
+use anstyle::{Color, Style};
 use std::io::{self, IsTerminal, Write};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -10,10 +11,13 @@ use std::time::Duration;
 use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
 
-use crate::args::{ArgsError, parse_cli, version_text};
+use crate::args::{ArgsError, parse_cli, save_config, version_text};
 use crate::discovery::{RepoEntry, discover_repos_with_progress};
 use crate::engine::run_engine;
 use crate::output::{JsonFormatter, OutputFormatter, TerminalFormatter, stream_in_order};
+
+const DISCOVERY_SPINNER_STYLE: Style =
+    Style::new().fg_color(Some(Color::Ansi256(anstyle::Ansi256Color(117))));
 
 fn main() {
     let (git_args, config) = match parse_cli(std::env::args()) {
@@ -31,6 +35,13 @@ fn main() {
             std::process::exit(2);
         }
     };
+
+    if config.save_config {
+        if let Err(err) = save_config(&config) {
+            eprintln!("{err}");
+            std::process::exit(1);
+        }
+    }
 
     let runtime = match tokio::runtime::Builder::new_multi_thread()
         .worker_threads(config.jobs)
@@ -127,7 +138,7 @@ async fn discover_repositories(config: &crate::args::MgitConfig) -> Result<Vec<R
             .map_err(|err| err.to_string());
     }
 
-    let mut stderr = io::stderr();
+    let mut stderr = anstream::stderr();
     let mut progress_error =
         write_discovery_progress(&mut stderr, 0, discovered_count.load(Ordering::Relaxed)).err();
 
@@ -192,10 +203,10 @@ fn write_discovery_progress(
     frame: usize,
     discovered_count: usize,
 ) -> io::Result<()> {
-    let dots = [".", "..", "...", "...."][frame % 4];
+    let spinner = ["●..", ".●.", "..●", ".●."][frame % 4];
     write!(
         writer,
-        "\rDiscovering repositories{dots:<4} {discovered_count} found"
+        "\rDiscovering repositories {DISCOVERY_SPINNER_STYLE}{spinner}{DISCOVERY_SPINNER_STYLE:#} {discovered_count} found"
     )?;
     writer.flush()
 }
@@ -227,7 +238,8 @@ mod tests {
         write_discovery_complete(&mut output, 3).unwrap();
 
         let output = String::from_utf8(output).unwrap();
-        assert!(output.contains("Discovering repositories.    3 found"));
+        assert!(output.contains("Discovering repositories "));
+        assert!(output.contains(" 3 found"));
         assert!(output.ends_with("Discovery complete: 3 repositories found.    \n"));
     }
 }

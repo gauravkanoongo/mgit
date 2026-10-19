@@ -61,14 +61,17 @@ mgit status -- --timer
 
 # Hide the startup banner
 mgit status -- --no-banner
+
+# Save the mgit options explicitly supplied here to the user config
+mgit status -- --jobs 8 --quiet --save-config
 ```
 
 ### Available `mgit` Options
 
 | Flag | Option | Description |
 | :--- | :--- | :--- |
-| `-C` | `--dir <PATH>` | Root directory to search for git repositories (default: `.`) |
-| `-j` | `--jobs <N>` | Maximum concurrent Git commands and Tokio worker threads (default: `MGIT_PARALLEL` or `2`) |
+| `-C` | `--dir <PATH>` | Root directory to search for git repositories (default: config value or `.`) |
+| `-j` | `--jobs <N>` | Maximum concurrent Git commands and Tokio worker threads (default: config value, otherwise `MGIT_PARALLEL` or `2`) |
 | `-q` | `--quiet` | Suppress output for clean repositories |
 | | `--only-changes` | Only display repositories that produced non-empty git stdout |
 | | `--json` | Output structured JSON report for automation and AI agents |
@@ -77,14 +80,46 @@ mgit status -- --no-banner
 | | `--timer` | Display per-repository and total execution duration |
 | | `--no-banner` | Suppress the ASCII startup banner |
 | `-d` | `--max-depth <N>` | Limit directory traversal depth |
+| | `--save-config` | Save mgit options explicitly supplied on this invocation |
 | `-h` | `--help` | Display usage and help |
 | `-V` | `--version` | Display the build's semantic version |
+
+The help and version flags are also recognized as standalone `mgit --help` / `mgit --version`
+requests without a delimiter. Invoking `mgit` without any Git arguments is a usage error.
+
+### User Configuration
+
+`mgit` reads the optional `~/.config/mgit.toml` file. On Windows, `~` resolves from `USERPROFILE`
+when `HOME` is not set. Configuration values are applied in this order: built-in defaults, TOML
+values, `MGIT_PARALLEL` for the default job count, then mgit options explicitly provided after
+the final `--`.
+
+The TOML file uses these top-level keys:
+
+```toml
+dir = "."
+jobs = 2
+quiet = false
+only_changes = false
+json = false
+summary_only = false
+fail_fast = false
+max_depth = 3
+timer = false
+no_banner = false
+```
+
+`--save-config` must appear among mgit's options after the final `--`. It saves only options
+explicitly given on that command line, before the Git command runs. Unspecified settings and
+unrelated TOML keys and sections are preserved. For example,
+`mgit status -- --jobs 8 --save-config` saves `jobs = 8` and leaves other settings unchanged.
+Running mgit without Git arguments remains an error, including a save-config-only invocation.
 
 Interactive runs show discovery progress only when stderr is a terminal and JSON output is not
 selected. The dotted status line reports the number of repositories found and remains visible
 after discovery completes. A separator precedes repository results; results retain the existing
 deterministic order. Progress is written to stderr, leaving stdout and JSON output free of status
-text.
+text. The in-place discovery indicator uses a colored, rotating dotted marker.
 
 `-j N` (or `--jobs N`) sets both the maximum number of concurrent Git commands and Tokio's
 asynchronous worker-thread count. The default is 2; `MGIT_PARALLEL` can override the default.
@@ -255,3 +290,11 @@ cargo build --target aarch64-pc-windows-msvc --release
 ## License
 
 [MIT licensed](./LICENSE)
+
+---
+
+## Proposed Follow-up (Not Yet Implemented)
+
+The proposed TOML-based repository exclusion list remains future work. It is intended to support
+multiline absolute and discovery-root-relative glob patterns, including recursive `**/*` patterns
+and both `/` and `\` separators. `--quiet` behavior is unchanged.

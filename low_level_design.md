@@ -357,6 +357,7 @@ num_cpus = "1.16"
 # Terminal Output & Colors
 anstream = "0.6"        # Cross-platform stream colorizer with NO_COLOR & pipe support
 anstyle = "1.0"
+toml_edit = "0.22"      # Parse and preserve user TOML configuration during partial updates
 
 [dev-dependencies]
 tempfile = "3.17"       # For hermetic integration tests
@@ -387,3 +388,67 @@ tempfile = "3.17"       # For hermetic integration tests
 3. `tests::test_exit_codes`:
    - Run a command that fails in one repo (e.g. `mgit checkout non-existent-branch`).
    - Verify process exits with code `1`.
+
+---
+
+## 6. Configuration and Planned Repository Exclusions
+
+Configuration loading and saving are implemented. Repository exclusion matching is still
+proposed work. Existing command-line routing stays unchanged: Git arguments precede the final
+`--`; mgit CLI options follow it. Explicit standalone `-h`/`--help` and `-V`/`--version`
+requests are handled by mgit as informational exceptions.
+
+### 6.1 Configuration loading
+
+Read the optional user config from `~/.config/mgit.toml`. It configures the discovery root, jobs,
+output flags, and max depth. Resolve `~` from `HOME`, falling back to `USERPROFILE`, and report
+malformed/unreadable config explicitly rather than silently ignoring it.
+
+Effective precedence, from lowest to highest:
+
+1. Built-in defaults.
+2. Values in `~/.config/mgit.toml`.
+3. Environment overrides (including `MGIT_PARALLEL` for jobs).
+4. Explicit mgit CLI options after the final `--`.
+
+Git arguments must never be consumed as config options. `--help` and `--version` are handled
+before reading the config so informational requests remain available even when the config file
+is invalid.
+
+`--save-config`, after the final `--`, persists only mgit settings explicitly supplied on the
+current command line. It does not serialize effective defaults or environment-derived values as
+if they were explicit CLI choices. It updates only corresponding top-level keys and preserves
+unspecified settings and unrelated sections. Saving occurs before repository discovery and Git
+command execution. A save-config-only invocation still fails because Git arguments are required.
+
+### 6.2 Repository exclusions in TOML
+
+Keep exclusions in the same `~/.config/mgit.toml`; do not introduce `.mgitignore` or another
+ignore file. Add an exclusion section containing a multiline list of patterns. The pattern
+matcher must support:
+
+- Absolute paths and paths relative to the active discovery root (`--dir`).
+- Glob wildcards, including recursive `**/*`-style patterns.
+- Both `/` and `\` separators, normalized consistently regardless of host OS.
+
+Apply exclusions while discovering repositories, before assigning sorted IDs, and prune an
+excluded repository directory instead of searching below it. Document and test exact glob
+semantics, case sensitivity, normalization, and behavior for malformed patterns before release.
+Use fixtures for absolute/relative paths, nested wildcards, both separator styles, and Windows
+and Unix path forms.
+
+### 6.3 Help, quiet, and discovery feedback
+
+Help text describes the standalone help/version exceptions and the no-Git-arguments usage error
+in addition to the last-`--` routing rule.
+
+Do not change the current `--quiet` behavior as part of this work. It currently hides successful
+results only when both captured stdout and stderr are empty; a command such as clean `git status`
+can still produce stdout and therefore be displayed.
+
+The interactive discovery indicator uses a colored rotating dotted marker. It is restricted to
+stderr on interactive non-JSON runs. Cross-platform terminal rendering should be manually
+validated on Windows, macOS, and Linux.
+
+The configuration library is `toml_edit`, chosen to retain unrelated TOML keys, sections, and
+formatting when `--save-config` updates selected settings.

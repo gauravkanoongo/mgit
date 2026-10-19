@@ -192,12 +192,49 @@ mgit fetch --all -- --fail-fast --summary-only
 
 ## 8. Maintained Terminal UX Direction
 
-The maintained terminal UX is deliberately plain and deterministic: write repository output in
-repository order, then print the final summary. Do not redraw a spinner, progress bar, status line,
-or TUI over command output. `--timer`, `--no-banner`, and the existing formatter styling are
-independent options and remain supported.
+The maintained terminal UX is deliberately simple and deterministic: write repository output in
+repository order, then print the final summary. The current interactive dotted discovery status is
+written to stderr, gated on TTY/non-JSON output, and finishes with a visible completion line.
+Evaluating a colored dotted/block spinner is a proposed visual enhancement, not a commitment to a
+progress bar or TUI over command output. `--timer`, `--no-banner`, and existing formatter styling
+remain independent options.
 
 The `v0.1.0` tag is the stable behavior reference; `v0.2.0` is the starting point for this
 simplification. The failed progress/status-bar and TUI experiments are closed and retained only
 for historical reference. See [branch-retirement.md](./branch-retirement.md) for the comparison,
 carry-forward decisions, and branch archival record.
+
+---
+
+## 9. Follow-up Work
+
+### A. Persistent mgit configuration
+- [x] Load all current mgit options from optional `~/.config/mgit.toml`.
+- [x] Use precedence: built-in defaults < TOML values < environment overrides < explicit mgit
+  options after the final `--`; retain `MGIT_PARALLEL` as the environment override for jobs.
+- [x] Add `--save-config` to persist only explicitly supplied mgit CLI options, updating only
+  those TOML keys and preserving unspecified settings and unrelated sections such as exclusions.
+  Saving occurs before discovery and command execution.
+- [x] Resolve the config file under `~/.config` using `HOME` or `USERPROFILE`; report invalid
+  config with an error.
+- [x] Keep Git arguments before the final `--` untouched and independent of TOML parsing.
+
+### B. Repository exclusions
+- [ ] Add a multiline exclusion-pattern list as a section of `~/.config/mgit.toml`; do not add a
+  standalone `.mgitignore` or other ignore file.
+- [ ] Support absolute and discovery-root-relative paths, glob/wildcard patterns (including
+  recursive `**/*`-style patterns), and both `/` and `\` separators.
+- [ ] Normalize paths before matching, prune excluded repository directories during discovery,
+  and define/test case sensitivity and glob edge cases across Windows and Unix-style paths.
+
+### C. CLI help and quiet behavior
+- [x] Explain in help that standalone `-h`/`--help` and `-V`/`--version` are mgit exceptions
+  before the final-delimiter forwarding rule, and that invocation without Git arguments is an
+  mgit usage error.
+- [ ] Preserve the existing `--quiet` behavior for this work; revisit its meaning only in a
+  separate change with explicit behavior decisions and tests.
+
+### D. Discovery indicator
+- [x] Replace the plain dotted indicator with a colored rotating dotted marker, preserving TTY
+  gating, stderr-only progress, and JSON silence.
+- [ ] Manually validate terminal rendering on macOS and Linux.

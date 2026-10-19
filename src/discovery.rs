@@ -34,7 +34,9 @@ fn should_prune(entry: &DirEntry) -> bool {
     }
 
     if let Some(file_name) = entry.file_name().to_str() {
-        PRUNED_DIR_NAMES.iter().any(|&pruned| file_name.eq_ignore_ascii_case(pruned))
+        PRUNED_DIR_NAMES
+            .iter()
+            .any(|&pruned| file_name.eq_ignore_ascii_case(pruned))
     } else {
         false
     }
@@ -180,7 +182,11 @@ mod tests {
         fs::create_dir_all(&worktree_dir).unwrap();
 
         let mut git_file = File::create(worktree_dir.join(".git")).unwrap();
-        writeln!(git_file, "gitdir: /path/to/parent/.git/worktrees/worktree-repo").unwrap();
+        writeln!(
+            git_file,
+            "gitdir: /path/to/parent/.git/worktrees/worktree-repo"
+        )
+        .unwrap();
 
         let config = MgitConfig {
             dir: temp.path().to_path_buf(),

@@ -2,7 +2,7 @@ use std::process::Stdio;
 use std::sync::Arc;
 use std::time::Instant;
 use tokio::process::Command;
-use tokio::sync::{mpsc, Semaphore};
+use tokio::sync::{Semaphore, mpsc};
 use tokio_util::sync::CancellationToken;
 
 use crate::args::MgitConfig;
@@ -226,7 +226,10 @@ mod tests {
             path: temp.path().to_path_buf(),
         };
         let cancel_token = CancellationToken::new();
-        let git_args = vec!["checkout".to_string(), "branch-does-not-exist-12345".to_string()];
+        let git_args = vec![
+            "checkout".to_string(),
+            "branch-does-not-exist-12345".to_string(),
+        ];
 
         let result = execute_repo(entry, &git_args, cancel_token).await;
         assert_eq!(result.id, 1);
@@ -286,8 +289,14 @@ mod tests {
         init_temp_git_repo(&temp2.path().to_path_buf());
 
         let repos = vec![
-            RepoEntry { id: 0, path: temp1.path().to_path_buf() },
-            RepoEntry { id: 1, path: temp2.path().to_path_buf() },
+            RepoEntry {
+                id: 0,
+                path: temp1.path().to_path_buf(),
+            },
+            RepoEntry {
+                id: 1,
+                path: temp2.path().to_path_buf(),
+            },
         ];
 
         let cancel_token = CancellationToken::new();
@@ -299,7 +308,10 @@ mod tests {
 
         let (tx, mut rx) = mpsc::channel(10);
         // Command that will fail
-        let git_args = Arc::new(vec!["checkout".to_string(), "invalid-branch-xyz".to_string()]);
+        let git_args = Arc::new(vec![
+            "checkout".to_string(),
+            "invalid-branch-xyz".to_string(),
+        ]);
 
         let cancel_token_clone = cancel_token.clone();
         tokio::spawn(async move {

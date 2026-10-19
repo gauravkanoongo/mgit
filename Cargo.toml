@@ -20,6 +20,7 @@ lexopt = "0.3"
 walkdir = "2.5"
 anstream = "0.6"
 anstyle = "1.0"
+toml_edit = "0.22"
 
 
 [dev-dependencies]

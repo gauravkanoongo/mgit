@@ -1,9 +1,9 @@
+use anstyle::{Color, Style};
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::io::Write;
 use std::sync::{Arc, Mutex};
-use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc;
-use anstyle::{Color, Style};
 
 use crate::args::{MgitConfig, VERSION};
 
@@ -128,7 +128,11 @@ impl<W: Write + Send + Sync> OutputFormatter for TerminalFormatter<W> {
             return;
         }
 
-        if config.quiet && result.status == RepoStatus::Success && result.stdout.trim().is_empty() && result.stderr.trim().is_empty() {
+        if config.quiet
+            && result.status == RepoStatus::Success
+            && result.stdout.trim().is_empty()
+            && result.stderr.trim().is_empty()
+        {
             return;
         }
 
@@ -145,8 +149,7 @@ impl<W: Write + Send + Sync> OutputFormatter for TerminalFormatter<W> {
             let _ = writeln!(
                 out,
                 "{header_style}{icon} {}{header_style:#} {DIM_LABEL}[{}ms]{DIM_LABEL:#}",
-                result.repo,
-                result.elapsed_ms
+                result.repo, result.elapsed_ms
             );
         } else {
             let _ = writeln!(out, "{header_style}{icon} {}{header_style:#}", result.repo);
@@ -160,7 +163,10 @@ impl<W: Write + Send + Sync> OutputFormatter for TerminalFormatter<W> {
         }
 
         // Clean, lightweight dark gray dimmed dashed separator line
-        let _ = writeln!(out, "{DIM_GRAY}┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈{DIM_GRAY:#}");
+        let _ = writeln!(
+            out,
+            "{DIM_GRAY}┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈{DIM_GRAY:#}"
+        );
     }
 
     fn render_summary(&self, stats: &SummaryStats, config: &MgitConfig) {
@@ -174,11 +180,19 @@ impl<W: Write + Send + Sync> OutputFormatter for TerminalFormatter<W> {
         );
 
         if stats.failure > 0 {
-            let _ = write!(out, " · {PASTEL_PEACH}Warnings: {}{PASTEL_PEACH:#}", stats.failure);
+            let _ = write!(
+                out,
+                " · {PASTEL_PEACH}Warnings: {}{PASTEL_PEACH:#}",
+                stats.failure
+            );
         }
 
         if stats.error > 0 {
-            let _ = write!(out, " · {PASTEL_ROSE}Errors: {}{PASTEL_ROSE:#}", stats.error);
+            let _ = write!(
+                out,
+                " · {PASTEL_ROSE}Errors: {}{PASTEL_ROSE:#}",
+                stats.error
+            );
         }
 
         if config.timer && stats.total > 0 {
@@ -229,7 +243,11 @@ impl<W: Write + Send + Sync> OutputFormatter for JsonFormatter<W> {
         if config.only_changes && !result.has_changes && result.status == RepoStatus::Success {
             return;
         }
-        if config.quiet && result.status == RepoStatus::Success && result.stdout.trim().is_empty() && result.stderr.trim().is_empty() {
+        if config.quiet
+            && result.status == RepoStatus::Success
+            && result.stdout.trim().is_empty()
+            && result.stderr.trim().is_empty()
+        {
             return;
         }
 
@@ -323,9 +341,15 @@ mod tests {
 
         // Send out of order: 2, 0, 1
         tokio::spawn(async move {
-            tx.send(dummy_result(2, "repo_c", RepoStatus::Success, "c")).await.unwrap();
-            tx.send(dummy_result(0, "repo_a", RepoStatus::Success, "a")).await.unwrap();
-            tx.send(dummy_result(1, "repo_b", RepoStatus::Success, "b")).await.unwrap();
+            tx.send(dummy_result(2, "repo_c", RepoStatus::Success, "c"))
+                .await
+                .unwrap();
+            tx.send(dummy_result(0, "repo_a", RepoStatus::Success, "a"))
+                .await
+                .unwrap();
+            tx.send(dummy_result(1, "repo_b", RepoStatus::Success, "b"))
+                .await
+                .unwrap();
         });
 
         struct BufferFormatter(Arc<Mutex<Vec<String>>>);

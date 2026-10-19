@@ -173,3 +173,22 @@
   dependency.
 - [x] Run `cargo test`: 34 unit tests and 6 end-to-end tests passed; Cargo updated the lockfile
   after removing the unused `num_cpus` dependency.
+
+### Follow-up: CLI help, configuration, exclusions, and terminal UX (2026-10-18)
+
+- [x] Clarify `--help` with the standalone `-h`/`--help` and `-V`/`--version` behavior before
+  the delimiter, the supported mgit-option forms after the last `--`, and the no-Git-arguments
+  error; ensure the documented routing rule matches `parse_cli`.
+- [x] Load current mgit options from `~/.config/mgit.toml`, with platform home resolution,
+  defaults/config/environment/CLI precedence, explicit config errors, and parser tests.
+- [x] Add `--save-config` to save mgit options explicitly supplied on the CLI into
+  `~/.config/mgit.toml`; update only explicitly specified keys and preserve unspecified settings
+  and unrelated sections (including repository exclusions). Define its interaction with the
+  final `--` routing rule and test safe partial updates.
+- [ ] Design and implement repository exclusions as a multiline pattern list in a section of
+  `~/.config/mgit.toml` (no separate ignore file), supporting absolute and discovery-root-relative
+  paths, glob wildcards including `**/*`-style patterns, and both `/` and `\` separators; define
+  normalization/glob semantics, excluded-repository pruning, and discovery tests.
+- [x] Replace the plain dotted discovery indicator with a colored rotating dotted marker while
+  preserving TTY/JSON behavior.
+- [ ] Manually validate Unicode/color rendering and terminal width on macOS and Linux.
